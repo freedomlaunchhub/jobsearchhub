@@ -3,6 +3,7 @@ import type { Job, Company, Settings } from '@/db/schema'
 import { searchJobs, checkJobStatus } from '@/lib/api'
 import type { SearchJobsResult } from '@/lib/api'
 import { getSettings, saveSettings } from '@/db/settings'
+import { jobDescriptionText } from '@/lib/utils'
 
 interface Progress {
   phase: string
@@ -61,7 +62,7 @@ function mapLinkedInJob(raw: Record<string, unknown>): Job {
     source: 'linkedin',
     sourceUrl: (raw.url as string) || (raw.apply_link as string) || '',
     postedDate: (raw.job_posted_date as string) || new Date().toISOString().split('T')[0],
-    description: (raw.job_summary as string) || (raw.job_description_formatted as string) || '',
+    description: jobDescriptionText(raw),
     salaryRange: salaryParts[0] || payRange || null,
     requirements: [],
     status: 'new' as const,

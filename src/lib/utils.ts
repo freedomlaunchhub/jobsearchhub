@@ -51,3 +51,27 @@ export const PRIORITY_COLORS: Record<string, string> = {
   medium: 'text-attention',
   low: 'text-primary',
 }
+
+// LinkedIn's job_summary field arrives as one flattened paragraph; the
+// job_description_formatted field keeps structure as HTML. Convert the HTML
+// to plain text with line breaks and bullets so descriptions stay readable
+// (JobCard renders with whitespace-pre-line).
+export function jobDescriptionText(raw: Record<string, unknown>): string {
+  const html = raw.job_description_formatted
+  if (typeof html === 'string' && html.trim()) {
+    return html
+      .replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6]|\/ul|\/ol)[^>]*>/gi, '\n')
+      .replace(/<\s*li[^>]*>/gi, '• ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&(#39|apos);/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+  return (raw.job_summary as string) || ''
+}

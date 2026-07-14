@@ -3,6 +3,7 @@ import { useSettings } from '@/hooks/useSettings'
 import { useJobs } from '@/hooks/useJobs'
 import { useCompanies } from '@/hooks/useCompanies'
 import { useDailyRefresh } from '@/hooks/useDailyRefresh'
+import { runLegacyImportOnce } from '@/lib/legacyImport'
 import DailyBriefing from './DailyBriefing'
 
 interface Props {
@@ -23,6 +24,17 @@ export default function DailyRefreshProvider({ children }: Props) {
     addJobs,
     addCompany,
   })
+
+  // One-time recovery of pre-D1 data stranded in the browser's IndexedDB.
+  // Reload so every view picks up the imported records.
+  useEffect(() => {
+    if (!settings) return
+    runLegacyImportOnce()
+      .then((imported) => {
+        if (imported > 0) window.location.reload()
+      })
+      .catch(() => {})
+  }, [settings])
 
   // Auto-trigger on first load if not yet refreshed today
   useEffect(() => {

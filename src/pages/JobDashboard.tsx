@@ -8,6 +8,7 @@ import StatsBar from '@/components/jobs/StatsBar'
 import JobFeed from '@/components/jobs/JobFeed'
 import PipelineBoard from '@/components/jobs/PipelineBoard'
 import { searchJobs, checkJobStatus } from '@/lib/api'
+import { jobDescriptionText } from '@/lib/utils'
 import type { Job, JobStatus } from '@/db/schema'
 
 export default function JobDashboard() {
@@ -66,7 +67,7 @@ export default function JobDashboard() {
           source: 'linkedin',
           sourceUrl: (raw.url as string) || (raw.apply_link as string) || '',
           postedDate: (raw.job_posted_date as string) || new Date().toISOString().split('T')[0],
-          description: (raw.job_summary as string) || '',
+          description: jobDescriptionText(raw),
           salaryRange: (raw.job_base_pay_range as string) || null,
           requirements: [],
           status: 'new' as const,

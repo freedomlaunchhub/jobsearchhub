@@ -2,6 +2,28 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// job_summary arrives as one flattened paragraph; the formatted (HTML) field
+// keeps structure — convert it to plain text with line breaks and bullets
+function descriptionText(raw) {
+  const html = raw.job_description_formatted;
+  if (typeof html === 'string' && html.trim()) {
+    return html
+      .replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6]|\/ul|\/ol)[^>]*>/gi, '\n')
+      .replace(/<\s*li[^>]*>/gi, '• ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&(#39|apos);/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  return raw.job_summary || '';
+}
+
 function mapLinkedInJob(raw, userId) {
   const baseSalary = raw.base_salary || null;
   let salaryRange = null;
@@ -25,7 +47,7 @@ function mapLinkedInJob(raw, userId) {
     source: 'linkedin',
     source_url: raw.url || raw.apply_link || '',
     posted_date: raw.job_posted_date || new Date().toISOString().split('T')[0],
-    description: raw.job_summary || raw.job_description_formatted || '',
+    description: descriptionText(raw),
     salary_range: salaryRange,
     requirements: '[]',
     status: 'new',
