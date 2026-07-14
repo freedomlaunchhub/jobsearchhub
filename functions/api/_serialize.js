@@ -155,6 +155,7 @@ export function deserializeSettings(row) {
     },
     preferredIndustries: JSON.parse(row.preferred_industries || '[]'),
     preferredCompanySizes: JSON.parse(row.preferred_company_sizes || '[]'),
+    discoveryCountry: row.discovery_country || 'CA',
     discoveryLocation: row.discovery_location || '',
     lastDailyRefresh: row.last_daily_refresh || '',
   };

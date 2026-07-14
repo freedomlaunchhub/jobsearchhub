@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Download, Upload, Trash2, LogOut, Compass } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
+import { LINKEDIN_INDUSTRIES, DISCOVERY_COUNTRIES } from '@/db/schema'
 import { discoverCompanies } from '@/lib/api'
 import { getAllJobs, saveJobs } from '@/db/jobs'
 import { getAllCompanies, saveCompany } from '@/db/companies'
@@ -29,7 +30,7 @@ export default function Settings() {
   const handleDiscover = async () => {
     const hasFilters = settings.preferredIndustries.length > 0 ||
       settings.preferredCompanySizes.length > 0 ||
-      settings.discoveryLocation
+      settings.discoveryCountry
     if (!hasFilters) return
 
     setDiscovering(true)
@@ -38,7 +39,8 @@ export default function Settings() {
     try {
       const result = await discoverCompanies({
         industry: settings.preferredIndustries[0] || undefined,
-        location: settings.discoveryLocation || undefined,
+        country: settings.discoveryCountry || undefined,
+        region: settings.discoveryLocation || undefined,
         companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,
       })
       if (result.savedCount > 0) {
@@ -128,7 +130,7 @@ export default function Settings() {
 
   const canDiscover = settings.preferredIndustries.length > 0 ||
     settings.preferredCompanySizes.length > 0 ||
-    settings.discoveryLocation
+    !!settings.discoveryCountry
 
   return (
     <div className="max-w-2xl">
@@ -219,26 +221,52 @@ export default function Settings() {
       </Section>
 
       <Section title="Company Discovery">
-        <Field label="Preferred Industries">
-          <TagInput
-            tags={settings.preferredIndustries}
-            onChange={(preferredIndustries) => updateSettings({ preferredIndustries })}
-            placeholder="Add an industry (e.g., Technology, Energy, Healthcare)..."
-          />
+        <Field label="Industries">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3">
+            {LINKEDIN_INDUSTRIES.map((industry) => (
+              <label key={industry} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.preferredIndustries.includes(industry)}
+                  onChange={(e) => {
+                    const updated = e.target.checked
+                      ? [...settings.preferredIndustries, industry]
+                      : settings.preferredIndustries.filter((i) => i !== industry)
+                    updateSettings({ preferredIndustries: updated })
+                  }}
+                  className="rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                {industry}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted mt-1">First selected industry is used for discovery search</p>
         </Field>
 
-        <Field label="Discovery Location">
+        <Field label="Country">
+          <select
+            value={settings.discoveryCountry}
+            onChange={(e) => updateSettings({ discoveryCountry: e.target.value })}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          >
+            {DISCOVERY_COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Province / State (optional)">
           <input
             type="text"
             value={settings.discoveryLocation}
             onChange={(e) => updateSettings({ discoveryLocation: e.target.value })}
-            placeholder="e.g., Alberta, Canada or Calgary"
+            placeholder="e.g., Alberta or California"
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           />
-          <p className="text-xs text-muted mt-1">Can differ from job search location — use a broader or narrower area</p>
+          <p className="text-xs text-muted mt-1">Narrows results within the selected country</p>
         </Field>
 
-        <Field label="Preferred Company Sizes">
+        <Field label="Company Sizes">
           <div className="space-y-2">
             {['1-50', '51-200', '201-1000', '1001-5000', '5001-10000', '10001+'].map((size) => (
               <label key={size} className="flex items-center gap-3 text-sm">
@@ -261,7 +289,7 @@ export default function Settings() {
 
         <div className="mt-4 pt-3 border-t border-slate-100">
           <p className="text-xs text-muted mb-3">
-            Searches LinkedIn for companies matching your industry, location, and size preferences.
+            Searches LinkedIn for companies matching your industry, country, and size preferences.
             New companies are added to your Network HQ list with "New" status.
           </p>
           <button

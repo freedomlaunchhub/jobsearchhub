@@ -13,58 +13,12 @@ function jsonResponse(data, status = 200) {
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 
-const COUNTRY_CODES = {
-  'canada': 'CA', 'united states': 'US', 'usa': 'US', 'us': 'US',
-  'united kingdom': 'GB', 'uk': 'GB', 'australia': 'AU', 'germany': 'DE',
-  'france': 'FR', 'india': 'IN', 'japan': 'JP', 'brazil': 'BR',
-  'mexico': 'MX', 'spain': 'ES', 'italy': 'IT', 'netherlands': 'NL',
-  'sweden': 'SE', 'norway': 'NO', 'denmark': 'DK', 'finland': 'FI',
-  'ireland': 'IE', 'singapore': 'SG', 'israel': 'IL', 'south korea': 'KR',
-  'new zealand': 'NZ', 'switzerland': 'CH', 'china': 'CN', 'taiwan': 'TW',
-};
-
-const INDUSTRY_MAP = {
-  'technology': 'Information Technology',
-  'tech': 'Information Technology',
-  'it': 'Information Technology',
-  'software': 'Software Development',
-  'healthcare': 'Hospital & Health Care',
-  'health': 'Hospital & Health Care',
-  'finance': 'Financial Services',
-  'banking': 'Banking',
-  'energy': 'Oil & Energy',
-  'oil': 'Oil & Energy',
-  'oil and gas': 'Oil & Energy',
-  'oil & gas': 'Oil & Energy',
-  'mining': 'Mining & Metals',
-  'construction': 'Construction',
-  'education': 'Education',
-  'retail': 'Retail',
-  'manufacturing': 'Manufacturing',
-  'consulting': 'Management Consulting',
-  'marketing': 'Marketing and Advertising',
-  'real estate': 'Real Estate',
-  'telecommunications': 'Telecommunications',
-  'telecom': 'Telecommunications',
-  'automotive': 'Automotive',
-  'aerospace': 'Aviation & Aerospace',
-  'agriculture': 'Farming',
-  'food': 'Food & Beverages',
-  'media': 'Media Production',
-  'entertainment': 'Entertainment',
-  'legal': 'Legal Services',
-  'insurance': 'Insurance',
-  'logistics': 'Logistics and Supply Chain',
-  'transportation': 'Transportation/Trucking/Railroad',
-  'hospitality': 'Hospitality',
-};
-
 export async function onRequestPost(context) {
   const { request, env, data } = context;
 
   try {
     const body = await request.json();
-    const { industry, location, companySizes, limit = 20 } = body;
+    const { industry, country, region, companySizes, limit = 20 } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -72,22 +26,19 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'BRIGHT_DATA_API_KEY not configured' }, 500);
     }
 
-    if (!industry && !location) {
-      return jsonResponse({ error: 'Industry or location is required' }, 400);
+    if (!industry && !country) {
+      return jsonResponse({ error: 'Industry or country is required' }, 400);
     }
 
     const filters = [];
     if (industry) {
-      const mapped = INDUSTRY_MAP[industry.toLowerCase()] || industry;
-      filters.push({ name: 'industries', operator: 'includes', value: mapped });
+      filters.push({ name: 'industries', operator: 'includes', value: industry });
     }
-    if (location) {
-      const countryCode = COUNTRY_CODES[location.toLowerCase()];
-      if (countryCode) {
-        filters.push({ name: 'country_code', operator: '=', value: countryCode });
-      } else {
-        filters.push({ name: 'headquarters', operator: 'includes', value: location });
-      }
+    if (country) {
+      filters.push({ name: 'country_code', operator: '=', value: country });
+    }
+    if (region) {
+      filters.push({ name: 'headquarters', operator: 'includes', value: region });
     }
 
     const searchBody = {

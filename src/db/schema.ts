@@ -12,9 +12,60 @@ export interface Settings {
   }
   preferredIndustries: string[]
   preferredCompanySizes: string[]
+  discoveryCountry: string
   discoveryLocation: string
   lastDailyRefresh?: string
 }
+
+export const LINKEDIN_INDUSTRIES = [
+  'Accounting',
+  'Automotive',
+  'Aviation & Aerospace',
+  'Banking',
+  'Biotechnology',
+  'Civil Engineering',
+  'Computer Software',
+  'Construction',
+  'Defense & Space',
+  'Education',
+  'Electrical/Electronic Manufacturing',
+  'Entertainment',
+  'Environmental Services',
+  'Farming',
+  'Financial Services',
+  'Food & Beverages',
+  'Government Administration',
+  'Hospital & Health Care',
+  'Hospitality',
+  'Human Resources',
+  'Information Technology',
+  'Insurance',
+  'Internet',
+  'Legal Services',
+  'Logistics and Supply Chain',
+  'Management Consulting',
+  'Manufacturing',
+  'Marketing and Advertising',
+  'Mechanical or Industrial Engineering',
+  'Media Production',
+  'Mining & Metals',
+  'Nonprofit Organization Management',
+  'Oil & Energy',
+  'Pharmaceuticals',
+  'Real Estate',
+  'Renewables & Environment',
+  'Retail',
+  'Software Development',
+  'Staffing and Recruiting',
+  'Telecommunications',
+  'Transportation/Trucking/Railroad',
+  'Utilities',
+] as const
+
+export const DISCOVERY_COUNTRIES = [
+  { code: 'CA', name: 'Canada' },
+  { code: 'US', name: 'United States' },
+] as const
 
 export interface JobSource {
   id: string
@@ -124,6 +175,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dailyTarget: 5,
   preferredIndustries: [],
   preferredCompanySizes: [],
+  discoveryCountry: 'CA',
   discoveryLocation: '',
   streak: {
     current: 0,

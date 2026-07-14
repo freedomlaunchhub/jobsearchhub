@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS settings (
   anthropic_api_key TEXT DEFAULT '',
   preferred_industries TEXT DEFAULT '[]',
   preferred_company_sizes TEXT DEFAULT '[]',
+  discovery_country TEXT DEFAULT 'CA',
   discovery_location TEXT DEFAULT '',
   last_daily_refresh TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)
