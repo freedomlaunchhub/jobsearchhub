@@ -72,10 +72,10 @@ export async function onRequestPost(context) {
       filter: {
         operator: 'and',
         filters: [
-          { name: 'current_company_name', value: companyName, operator: 'contains' },
+          { name: 'current_company_name', value: companyName, operator: 'includes' },
         ],
       },
-      limit: 25,
+      size: 25,
     };
 
     const response = await fetch(
@@ -96,7 +96,7 @@ export async function onRequestPost(context) {
     }
 
     const results = await response.json();
-    const items = Array.isArray(results) ? results : (results.results || []);
+    const items = results.hits || [];
 
     const allRoles = [...targetRoles];
     for (const jt of userJobTitles) {

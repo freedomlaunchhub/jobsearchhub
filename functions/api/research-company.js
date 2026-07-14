@@ -32,10 +32,10 @@ export async function onRequestPost(context) {
       filter: {
         operator: 'and',
         filters: [
-          { name: 'name', value: companyName, operator: 'contains' },
+          { name: 'name', value: companyName, operator: 'includes' },
         ],
       },
-      limit: 3,
+      size: 3,
     };
 
     const response = await fetch(
@@ -56,7 +56,7 @@ export async function onRequestPost(context) {
     }
 
     const results = await response.json();
-    const items = Array.isArray(results) ? results : (results.results || []);
+    const items = results.hits || [];
 
     if (items.length === 0) {
       return jsonResponse({

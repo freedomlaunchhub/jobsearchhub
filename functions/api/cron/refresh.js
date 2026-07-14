@@ -172,10 +172,10 @@ export async function onRequestPost(context) {
             filter: {
               operator: 'and',
               filters: [
-                { name: 'name', value: company.name, operator: 'contains' },
+                { name: 'name', value: company.name, operator: 'includes' },
               ],
             },
-            limit: 3,
+            size: 3,
           };
 
           const researchResponse = await fetch(
@@ -192,7 +192,7 @@ export async function onRequestPost(context) {
 
           if (researchResponse.ok) {
             const researchResults = await researchResponse.json();
-            const items = Array.isArray(researchResults) ? researchResults : (researchResults.results || []);
+            const items = researchResults.hits || [];
 
             if (items.length > 0) {
               const c = items[0];
@@ -227,10 +227,10 @@ export async function onRequestPost(context) {
             filter: {
               operator: 'and',
               filters: [
-                { name: 'current_company_name', value: company.name, operator: 'contains' },
+                { name: 'current_company_name', value: company.name, operator: 'includes' },
               ],
             },
-            limit: 25,
+            size: 25,
           };
 
           const peopleResponse = await fetch(
@@ -247,7 +247,7 @@ export async function onRequestPost(context) {
 
           if (peopleResponse.ok) {
             const peopleResults = await peopleResponse.json();
-            const people = Array.isArray(peopleResults) ? peopleResults : (peopleResults.results || []);
+            const people = peopleResults.hits || [];
 
             let contactsSaved = 0;
             for (const person of people) {

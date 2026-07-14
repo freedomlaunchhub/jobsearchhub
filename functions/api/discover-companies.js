@@ -26,40 +26,25 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'BRIGHT_DATA_API_KEY not configured' }, 500);
     }
 
-    if (!industry && !location && !companySize) {
-      return jsonResponse({ error: 'At least one filter is required' }, 400);
+    if (!industry && !location) {
+      return jsonResponse({ error: 'Industry or location is required' }, 400);
     }
 
-    // Build filter using only 'name' field (confirmed working) with industry as keyword
-    // The 'industries', 'headquarters', 'company_size' fields may not support 'contains'
-    const keyword = industry || location || '';
+    const filters = [];
+    if (industry) {
+      filters.push({ name: 'industries', operator: 'includes', value: industry });
+    }
+    if (location) {
+      filters.push({ name: 'headquarters', operator: 'includes', value: location });
+    }
+
     const searchBody = {
+      size: Math.min(limit, 50),
       filter: {
         operator: 'and',
-        filters: [
-          { name: 'name', value: keyword, operator: 'contains' },
-        ],
+        filters,
       },
-      limit: Math.min(limit, 50),
     };
-
-    // If we have industry, search by industry field using the same pattern as research
-    if (industry) {
-      searchBody.filter.filters = [
-        { name: 'industries', value: industry, operator: 'contains' },
-      ];
-    }
-
-    // Add location filter if provided
-    if (location && industry) {
-      searchBody.filter.filters.push(
-        { name: 'headquarters', value: location, operator: 'contains' }
-      );
-    } else if (location && !industry) {
-      searchBody.filter.filters = [
-        { name: 'headquarters', value: location, operator: 'contains' },
-      ];
-    }
 
     const response = await fetch(
       `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
@@ -82,7 +67,7 @@ export async function onRequestPost(context) {
     }
 
     const results = await response.json();
-    const items = Array.isArray(results) ? results : (results.results || results.hits || []);
+    const items = results.hits || [];
 
     // Get existing company names for this user to mark duplicates
     let existingNames = new Set();
