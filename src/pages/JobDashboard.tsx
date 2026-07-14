@@ -6,7 +6,7 @@ import { useDailyLog } from '@/hooks/useDailyLog'
 import StatsBar from '@/components/jobs/StatsBar'
 import JobFeed from '@/components/jobs/JobFeed'
 import PipelineBoard from '@/components/jobs/PipelineBoard'
-import { searchJobs } from '@/lib/api'
+import { searchJobs, checkJobStatus } from '@/lib/api'
 import type { Job, JobStatus } from '@/db/schema'
 
 export default function JobDashboard() {
@@ -41,7 +41,6 @@ export default function JobDashboard() {
 
       // If pending, poll for results
       if (result.pending && result.snapshotId) {
-        const { checkJobStatus } = await import('@/lib/api')
         for (let i = 0; i < 30; i++) {
           await new Promise((r) => setTimeout(r, 5000))
           const status = await checkJobStatus({
