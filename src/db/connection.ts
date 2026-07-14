@@ -1,14 +1,21 @@
 import { openDB, type IDBPDatabase } from 'idb'
 
 const DB_NAME = 'job-search-hub'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 
 export function getDB(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion) {
+        // v1→v2: clear seed/fake data from all stores
+        if (oldVersion === 1) {
+          for (const name of Array.from(db.objectStoreNames)) {
+            db.deleteObjectStore(name)
+          }
+        }
+
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' })
         }
