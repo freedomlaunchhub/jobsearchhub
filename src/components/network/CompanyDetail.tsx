@@ -160,22 +160,6 @@ export default function CompanyDetail({
         </div>
       </div>
 
-      {/* Why Dream */}
-      <div className="mb-4">
-        <label className="block text-xs font-medium text-slate-500 mb-1">Why Dream Company?</label>
-        <textarea
-          defaultValue={company.whyDream}
-          onBlur={(e) => {
-            if (e.target.value !== company.whyDream) {
-              onUpdateCompany({ whyDream: e.target.value });
-            }
-          }}
-          rows={6}
-          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
-          placeholder="What makes this a dream company for you?"
-        />
-      </div>
-
       {/* Notes */}
       <div className="mb-6">
         <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>

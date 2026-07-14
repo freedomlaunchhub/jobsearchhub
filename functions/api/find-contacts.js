@@ -53,7 +53,7 @@ export function scoreContactRole(position, peerTitles) {
 // work in functions that don't hire for the user's target roles.
 const NEGATIVE_KEYWORDS = [
   'student recruit', 'international recruit', 'admission', 'enrollment', 'enrolment',
-  'sales', 'account manag', 'account executive', 'account support', 'customer',
+  'sales', 'account manag', 'account executive', 'account support', 'account director', 'customer',
   'client relations', 'business development', 'marketing',
 ];
 
@@ -122,19 +122,31 @@ Reply with ONLY a JSON array of the numbers to KEEP, e.g. [0,3,7]. Reply [] if n
 // person's actual current job title at the company; prefer it for matching.
 export function currentTitleAt(person, companyName) {
   const companyLower = companyName.trim().toLowerCase();
+
   for (const exp of person.experience || []) {
     const expCompany = (exp.company || '').trim().toLowerCase();
     if (expCompany && expCompany !== companyLower) continue;
     // Grouped roles at one company nest under `positions`, newest first
     if (Array.isArray(exp.positions) && exp.positions.length > 0) {
       const current = exp.positions.find((p) => p.end_date === 'Present') || exp.positions[0];
-      if (current?.title) return current.title;
+      if (current?.title && current.title.trim().toLowerCase() !== companyLower) return current.title;
     }
-    if (exp.title && (exp.end_date === 'Present' || !exp.end_date || expCompany === companyLower)) {
+    // Grouped entries use the company name as the entry title — never a job title
+    if (exp.title && exp.title.trim().toLowerCase() !== companyLower &&
+        (exp.end_date === 'Present' || !exp.end_date || expCompany === companyLower)) {
       return exp.title;
     }
   }
-  return person.position || person.title || '';
+
+  // Fall back to the headline, trimmed to its title part: "Head of Canada -
+  // ApplyBoard" -> "Head of Canada", "Project Manager at ApplyBoard | X" ->
+  // "Project Manager"
+  let headline = person.position || person.title || '';
+  headline = headline.split('|')[0];
+  headline = headline.replace(/\s+(at|@)\s+.*$/i, '');
+  const idx = headline.toLowerCase().indexOf(companyLower);
+  if (idx > 0) headline = headline.slice(0, idx).replace(/[\s,–—-]+$/, '');
+  return headline.trim();
 }
 
 export async function onRequestPost(context) {
