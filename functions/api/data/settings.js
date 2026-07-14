@@ -33,7 +33,7 @@ export async function onRequestPut(context) {
 
     await env.DB.prepare(
       `INSERT OR REPLACE INTO settings (user_id, job_titles, location, remote_included, job_sources, daily_target, streak_current, streak_longest, last_active_date, bright_data_api_key, anthropic_api_key, last_daily_refresh)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?)`
     ).bind(
       userId,
       JSON.stringify(body.jobTitles || []),
@@ -44,8 +44,6 @@ export async function onRequestPut(context) {
       body.streak?.current || 0,
       body.streak?.longest || 0,
       body.streak?.lastActiveDate || '',
-      body.brightDataApiKey || '',
-      body.anthropicApiKey || '',
       body.lastDailyRefresh || ''
     ).run();
 

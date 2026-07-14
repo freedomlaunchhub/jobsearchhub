@@ -153,8 +153,6 @@ export function deserializeSettings(row) {
       longest: row.streak_longest || 0,
       lastActiveDate: row.last_active_date || '',
     },
-    brightDataApiKey: row.bright_data_api_key || '',
-    anthropicApiKey: row.anthropic_api_key || '',
     lastDailyRefresh: row.last_daily_refresh || '',
   };
 }

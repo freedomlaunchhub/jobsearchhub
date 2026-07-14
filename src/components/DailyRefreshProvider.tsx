@@ -14,7 +14,7 @@ export default function DailyRefreshProvider({ children }: Props) {
   const { settings } = useSettings()
   const { jobs, addJobs } = useJobs()
   const { companies, addCompany, updateCompany } = useCompanies()
-  const { contacts, addContact, updateContact } = useContacts()
+  const { contacts, updateContact } = useContacts()
   const [skipped, setSkipped] = useState(false)
   const [triggered, setTriggered] = useState(false)
 
@@ -26,7 +26,6 @@ export default function DailyRefreshProvider({ children }: Props) {
     addJobs,
     addCompany,
     updateCompany,
-    addContact,
     updateContact,
   })
 

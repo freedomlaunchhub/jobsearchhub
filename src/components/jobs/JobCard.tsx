@@ -39,9 +39,8 @@ export default function JobCard({
 }: JobCardProps) {
   const [notes, setNotes] = useState(job.notes);
 
-  const handleApply = () => {
+  const handleOpenJob = () => {
     window.open(job.sourceUrl, '_blank', 'noopener,noreferrer');
-    onStatusChange(job.id, 'applied');
   };
 
   return (
@@ -119,11 +118,11 @@ export default function JobCard({
               </button>
             )}
             <button
-              onClick={handleApply}
+              onClick={handleOpenJob}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary-dark rounded-md transition-colors"
             >
               <ExternalLink className="w-4 h-4" />
-              Apply
+              View Posting
             </button>
             <button
               onClick={() => onStatusChange(job.id, 'pass')}

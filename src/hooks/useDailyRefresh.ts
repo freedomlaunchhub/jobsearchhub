@@ -28,7 +28,6 @@ interface DailyRefreshParams {
   addJobs: (jobs: Job[]) => Promise<void>
   addCompany: (partial: Partial<Company>) => Promise<Company>
   updateCompany: (id: string, partial: Partial<Company>) => Promise<void>
-  addContact: (partial: Partial<Contact>) => Promise<Contact>
   updateContact: (id: string, partial: Partial<Contact>) => Promise<void>
 }
 
@@ -84,7 +83,6 @@ export function useDailyRefresh({
   addJobs,
   addCompany,
   updateCompany,
-  addContact,
   updateContact,
 }: DailyRefreshParams): DailyRefreshResult {
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -329,7 +327,7 @@ export function useDailyRefresh({
     } finally {
       setIsRefreshing(false)
     }
-  }, [settings, jobs, companies, contacts, addJobs, addCompany, updateCompany, addContact, updateContact])
+  }, [settings, jobs, companies, contacts, addJobs, addCompany, updateCompany, updateContact])
 
   const runDailyRefresh = useCallback(() => runRefreshInternal(false), [runRefreshInternal])
   const forceRefresh = useCallback(() => runRefreshInternal(true), [runRefreshInternal])

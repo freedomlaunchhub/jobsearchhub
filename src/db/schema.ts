@@ -10,8 +10,6 @@ export interface Settings {
     longest: number
     lastActiveDate: string | null
   }
-  brightDataApiKey: string
-  anthropicApiKey: string
   lastDailyRefresh?: string
 }
 
@@ -126,6 +124,4 @@ export const DEFAULT_SETTINGS: Settings = {
     longest: 0,
     lastActiveDate: null,
   },
-  brightDataApiKey: '',
-  anthropicApiKey: '',
 }
