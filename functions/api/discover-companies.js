@@ -13,11 +13,13 @@ function jsonResponse(data, status = 200) {
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 
-// One discovery imports the entire matching pool in a single request,
-// paging through the API internally until the criteria are exhausted.
-// PAGE_SIZE keeps per-page memory small (records carry heavy fields like
-// post history). Bright Data charges ~$2.50 per 1,000 records returned.
-const PAGE_SIZE = 500;
+// A discovery pull is batched across multiple requests: each invocation
+// fetches up to PER_REQUEST records and returns a nextCursor; the client
+// keeps calling until the pool is exhausted. The overall pull stays uncapped
+// while each invocation stays inside Cloudflare's CPU/memory limits (dataset
+// records are huge — 20-50KB each with post history and employee lists).
+const PAGE_SIZE = 50;
+const PER_REQUEST = 100;
 
 // Canonical LinkedIn size buckets as stored in the Bright Data dataset
 // (values appear as e.g. "1,001-5,000 employees" — 'includes' matches the prefix).
@@ -56,7 +58,7 @@ export async function onRequestPost(context) {
   try {
     const { request, env, data } = context;
     const body = await request.json();
-    const { industries, country, region, companySizes, limit, preview } = body;
+    const { industries, country, region, companySizes, preview, searchAfter: cursorIn } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -98,11 +100,9 @@ export async function onRequestPost(context) {
     }
 
     const filter = filters.length === 1 ? filters[0] : { operator: 'and', filters };
-    // No default cap — the pull covers everything the selected criteria match.
-    // An explicit limit in the request body is still honored if provided.
     // Preview mode fetches a single record just to read the match count
     // (zero-match queries are free; 1 record costs a fraction of a cent).
-    const maxTotal = preview ? 1 : (limit || Infinity);
+    const maxTotal = preview ? 1 : PER_REQUEST;
 
     let existingNames = new Set();
     if (userId) {
@@ -119,7 +119,8 @@ export async function onRequestPost(context) {
     const companies = [];
     const seenNames = new Set();
     let totalMatching = null;
-    let searchAfter = null;
+    let searchAfter = Array.isArray(cursorIn) && cursorIn.length > 0 ? cursorIn : null;
+    let poolExhausted = false;
 
     while (companies.length < maxTotal) {
       const searchBody = {
@@ -150,7 +151,10 @@ export async function onRequestPost(context) {
       }
 
       // 422 means the filter matched zero records — a valid empty result
-      if (response.status === 422) break;
+      if (response.status === 422) {
+        poolExhausted = true;
+        break;
+      }
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
@@ -190,8 +194,13 @@ export async function onRequestPost(context) {
       }
 
       searchAfter = results.search_after;
-      if (!searchAfter || items.length === 0) break;
+      if (!searchAfter || items.length === 0) {
+        poolExhausted = true;
+        break;
+      }
     }
+
+    const nextCursor = !preview && !poolExhausted && searchAfter ? searchAfter : null;
 
     if (preview) {
       return jsonResponse({
@@ -241,6 +250,7 @@ export async function onRequestPost(context) {
       total: companies.length,
       alreadyExisted: companies.filter((c) => c.alreadyExists).length,
       totalMatching,
+      nextCursor,
     });
   } catch (err) {
     return jsonResponse({ error: err.message || 'Internal server error', stack: String(err.stack || '').slice(0, 500) }, 500);

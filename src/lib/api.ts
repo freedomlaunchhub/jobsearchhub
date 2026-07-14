@@ -106,8 +106,8 @@ export interface DiscoverCompaniesParams {
   country?: string
   region?: string
   companySizes?: string[]
-  limit?: number
   preview?: boolean
+  searchAfter?: unknown[]
 }
 
 export interface DiscoverCompaniesResult {
@@ -125,6 +125,7 @@ export interface DiscoverCompaniesResult {
   alreadyExisted: number
   totalMatching: number | null
   preview?: boolean
+  nextCursor?: unknown[] | null
 }
 
 export async function discoverCompanies(params: DiscoverCompaniesParams): Promise<DiscoverCompaniesResult> {

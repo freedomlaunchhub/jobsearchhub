@@ -133,13 +133,14 @@ export default function NetworkDashboard() {
     }
   }
 
-  const handleDiscover = async (overrides?: { industries?: string[]; companySizes?: string[]; preview?: boolean }) => {
+  const handleDiscover = async (overrides?: { industries?: string[]; companySizes?: string[]; preview?: boolean; searchAfter?: unknown[] }) => {
     const result = await discoverCompanies({
       industries: overrides?.industries ?? (settings?.preferredIndustries.length ? settings.preferredIndustries : undefined),
       country: settings?.discoveryCountry || undefined,
       region: settings?.discoveryLocation || undefined,
       companySizes: overrides?.companySizes ?? (settings?.preferredCompanySizes.length ? settings.preferredCompanySizes : undefined),
       preview: overrides?.preview,
+      searchAfter: overrides?.searchAfter,
     })
     if (!overrides?.preview && result.savedCount > 0) {
       await refreshCompanies()

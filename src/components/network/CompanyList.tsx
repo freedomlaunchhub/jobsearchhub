@@ -9,6 +9,7 @@ interface DiscoverOverrides {
   industries?: string[];
   companySizes?: string[];
   preview?: boolean;
+  searchAfter?: unknown[];
 }
 
 interface CompanyListProps {
@@ -172,26 +173,48 @@ export default function CompanyList({
   async function handleDiscover() {
     setDiscovering(true);
     setDiscoverResult(null);
+    // The server returns up to ~100 companies per call with a cursor; keep
+    // calling until the pool is exhausted so the pull covers everything the
+    // criteria match, with live progress along the way.
+    let saved = 0;
+    let existed = 0;
+    let seen = 0;
+    let totalMatching: number | null = null;
+    let cursor: unknown[] | undefined;
     try {
-      const result = await onDiscover(discoverOverrides());
-      if (result.savedCount > 0) {
+      do {
+        const result = await onDiscover({ ...discoverOverrides(), searchAfter: cursor });
+        saved += result.savedCount;
+        existed += result.alreadyExisted;
+        seen += result.total;
+        totalMatching = result.totalMatching ?? totalMatching;
+        cursor = result.nextCursor ?? undefined;
         setDiscoverResult(
-          result.totalMatching
-            ? `Added ${result.savedCount} new companies (${result.totalMatching} matched your criteria)`
-            : `Added ${result.savedCount} new companies`
+          `Pulling companies... ${seen}${totalMatching ? ` of ${totalMatching.toLocaleString()}` : ''} (${saved} new)`
         );
-      } else if (result.total > 0) {
-        setDiscoverResult(`Found ${result.total} companies (all already in your list)`);
+      } while (cursor);
+
+      if (saved > 0) {
+        setDiscoverResult(
+          `Added ${saved} new companies${existed > 0 ? ` (${existed} were already in your list)` : ''}`
+        );
+      } else if (seen > 0) {
+        setDiscoverResult(`Found ${seen} companies (all already in your list)`);
       } else {
         setDiscoverResult('No companies found — try different criteria');
       }
       setShowDiscover(false);
       setPreviewCount(null);
+      setTimeout(() => setDiscoverResult(null), 8000);
     } catch {
-      setDiscoverResult('Discovery failed — check your criteria and try again');
+      setDiscoverResult(
+        saved > 0
+          ? `Pull interrupted after ${saved} new companies — click Pull again to continue`
+          : 'Discovery failed — check your criteria and try again'
+      );
+      setTimeout(() => setDiscoverResult(null), 10000);
     } finally {
       setDiscovering(false);
-      setTimeout(() => setDiscoverResult(null), 8000);
     }
   }
 
