@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, ArrowUpDown, Upload } from 'lucide-react';
+import { Plus, Search, ArrowUpDown, Upload, Compass } from 'lucide-react';
 import type { Company, CompanyPriority } from '../../db/schema';
+import type { DiscoverCompaniesResult } from '../../lib/api';
 import StatusBadge from '../common/StatusBadge';
 
 interface CompanyListProps {
@@ -9,6 +10,10 @@ interface CompanyListProps {
   onSelect: (id: string) => void;
   onAdd: (company: Partial<Company>) => void;
   onImport: (csvText: string) => void;
+  onDiscover: (params: { industry?: string; location?: string; companySize?: string }) => Promise<DiscoverCompaniesResult>;
+  defaultIndustries: string[];
+  defaultLocation: string;
+  defaultCompanySizes: string[];
 }
 
 const PRIORITY_DOT_COLORS: Record<string, string> = {
@@ -23,14 +28,24 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 2,
 };
 
-export default function CompanyList({ companies, selectedId, onSelect, onAdd, onImport }: CompanyListProps) {
+export default function CompanyList({
+  companies, selectedId, onSelect, onAdd, onImport, onDiscover,
+  defaultIndustries, defaultLocation, defaultCompanySizes,
+}: CompanyListProps) {
   const [showForm, setShowForm] = useState(false);
+  const [showDiscover, setShowDiscover] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'priority' | 'alpha'>('priority');
   const [formName, setFormName] = useState('');
   const [formIndustry, setFormIndustry] = useState('');
   const [formPriority, setFormPriority] = useState<CompanyPriority>('medium');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [discoverIndustry, setDiscoverIndustry] = useState(defaultIndustries[0] ?? '');
+  const [discoverLocation, setDiscoverLocation] = useState(defaultLocation);
+  const [discoverSize, setDiscoverSize] = useState(defaultCompanySizes[0] ?? '');
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<string | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -42,7 +57,6 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
       }
     };
     reader.readAsText(file);
-    // Reset so the same file can be re-imported
     e.target.value = '';
   }
 
@@ -69,6 +83,32 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
     setShowForm(false);
   }
 
+  async function handleDiscover(e: React.FormEvent) {
+    e.preventDefault();
+    if (!discoverIndustry && !discoverLocation && !discoverSize) return;
+    setDiscovering(true);
+    setDiscoverResult(null);
+    try {
+      const result = await onDiscover({
+        industry: discoverIndustry || undefined,
+        location: discoverLocation || undefined,
+        companySize: discoverSize || undefined,
+      });
+      if (result.savedCount > 0) {
+        setDiscoverResult(`Added ${result.savedCount} new companies`);
+      } else if (result.total > 0) {
+        setDiscoverResult(`Found ${result.total} companies (all already in your list)`);
+      } else {
+        setDiscoverResult('No companies found matching those criteria');
+      }
+    } catch {
+      setDiscoverResult('Discovery failed — try different criteria');
+    } finally {
+      setDiscovering(false);
+      setTimeout(() => setDiscoverResult(null), 6000);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white rounded-xl shadow-sm">
       {/* Header */}
@@ -78,11 +118,23 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => { setShowDiscover(!showDiscover); setShowForm(false); }}
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                showDiscover
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              Discover
+            </button>
+            <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
             >
               <Upload className="w-3.5 h-3.5" />
-              Import CSV
+              CSV
             </button>
             <input
               ref={fileInputRef}
@@ -93,14 +145,60 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
             />
             <button
               type="button"
-              onClick={() => setShowForm(!showForm)}
+              onClick={() => { setShowForm(!showForm); setShowDiscover(false); }}
               className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
             >
               <Plus className="w-3.5 h-3.5" />
-              Add Company
+              Add
             </button>
           </div>
         </div>
+
+        {/* Discover form */}
+        {showDiscover && (
+          <form onSubmit={handleDiscover} className="mb-3 p-3 bg-indigo-50 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-indigo-700 mb-1">Find companies by criteria</p>
+            <input
+              type="text"
+              placeholder="Industry (e.g., Technology, Energy)"
+              value={discoverIndustry}
+              onChange={(e) => setDiscoverIndustry(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <input
+              type="text"
+              placeholder="Location (e.g., Calgary, Canada)"
+              value={discoverLocation}
+              onChange={(e) => setDiscoverLocation(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <div className="flex items-center gap-2">
+              <select
+                value={discoverSize}
+                onChange={(e) => setDiscoverSize(e.target.value)}
+                className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="">Any size</option>
+                <option value="1-50">1-50</option>
+                <option value="51-200">51-200</option>
+                <option value="201-1000">201-1,000</option>
+                <option value="1001-5000">1,001-5,000</option>
+                <option value="5001-10000">5,001-10,000</option>
+                <option value="10001+">10,001+</option>
+              </select>
+              <button
+                type="submit"
+                disabled={discovering || (!discoverIndustry && !discoverLocation && !discoverSize)}
+                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {discovering ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+            {discoverResult && (
+              <p className="text-xs text-indigo-700 bg-indigo-100 rounded px-2 py-1">{discoverResult}</p>
+            )}
+          </form>
+        )}
 
         {/* Add form */}
         {showForm && (

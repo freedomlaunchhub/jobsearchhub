@@ -7,7 +7,7 @@ import Dream100Progress from '@/components/network/Dream100Progress'
 import FollowUpQueue from '@/components/network/FollowUpQueue'
 import CompanyList from '@/components/network/CompanyList'
 import CompanyDetail from '@/components/network/CompanyDetail'
-import { researchCompany, findContacts, generateMessage } from '@/lib/api'
+import { researchCompany, findContacts, generateMessage, discoverCompanies } from '@/lib/api'
 import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
@@ -24,7 +24,6 @@ export default function NetworkDashboard() {
   const handleAddCompany = async (partial: Partial<Company>) => {
     const company = await addCompany(partial)
     setSelectedCompanyId(company.id)
-    researchAndFindForCompany(company)
   }
 
   const handleDeleteCompany = async () => {
@@ -127,9 +126,16 @@ export default function NetworkDashboard() {
   const handleImportCompanies = async (csvText: string) => {
     const parsed = parseCompaniesCSV(csvText)
     for (const partial of parsed) {
-      const company = await addCompany(partial)
-      researchAndFindForCompany(company)
+      await addCompany(partial)
     }
+  }
+
+  const handleDiscover = async (params: { industry?: string; location?: string; companySize?: string }) => {
+    const result = await discoverCompanies(params)
+    if (result.savedCount > 0) {
+      await refreshCompanies()
+    }
+    return result
   }
 
   if (companiesLoading || contactsLoading) {
@@ -155,6 +161,10 @@ export default function NetworkDashboard() {
             onSelect={setSelectedCompanyId}
             onAdd={handleAddCompany}
             onImport={handleImportCompanies}
+            onDiscover={handleDiscover}
+            defaultIndustries={settings?.preferredIndustries ?? []}
+            defaultLocation={settings?.location ?? ''}
+            defaultCompanySizes={settings?.preferredCompanySizes ?? []}
           />
         </div>
 

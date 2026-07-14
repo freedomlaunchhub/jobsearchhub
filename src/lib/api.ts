@@ -93,3 +93,30 @@ export interface FindContactsResult {
 export function findContacts(params: FindContactsParams) {
   return apiCall<FindContactsResult>('find-contacts', params)
 }
+
+export interface DiscoverCompaniesParams {
+  industry?: string
+  location?: string
+  companySize?: string
+  limit?: number
+}
+
+export interface DiscoverCompaniesResult {
+  companies: Array<{
+    name: string
+    website: string | null
+    linkedinUrl: string | null
+    industry: string | null
+    size: string | null
+    headquarters: string | null
+    about: string | null
+    alreadyExists: boolean
+  }>
+  savedCount: number
+  total: number
+  alreadyExisted: number
+}
+
+export function discoverCompanies(params: DiscoverCompaniesParams) {
+  return apiCall<DiscoverCompaniesResult>('discover-companies', params)
+}

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS settings (
   last_active_date TEXT,
   bright_data_api_key TEXT DEFAULT '',
   anthropic_api_key TEXT DEFAULT '',
+  preferred_industries TEXT DEFAULT '[]',
+  preferred_company_sizes TEXT DEFAULT '[]',
   last_daily_refresh TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -55,7 +57,7 @@ CREATE TABLE IF NOT EXISTS companies (
   linkedin_url TEXT DEFAULT '',
   size TEXT DEFAULT '',
   priority TEXT DEFAULT 'medium',
-  status TEXT DEFAULT 'researching',
+  status TEXT DEFAULT 'new',
   why_dream TEXT DEFAULT '',
   notes TEXT DEFAULT '',
   contact_count INTEGER DEFAULT 0,

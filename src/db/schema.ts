@@ -10,6 +10,8 @@ export interface Settings {
     longest: number
     lastActiveDate: string | null
   }
+  preferredIndustries: string[]
+  preferredCompanySizes: string[]
   lastDailyRefresh?: string
 }
 
@@ -47,7 +49,7 @@ export interface Job {
 
 export type CompanySize = 'Small' | 'Medium' | 'Large' | 'Enterprise'
 export type CompanyPriority = 'high' | 'medium' | 'low'
-export type CompanyStatus = 'open_listing' | 'researching' | 'networking' | 'applied' | 'interviewing'
+export type CompanyStatus = 'open_listing' | 'new' | 'researched' | 'networking' | 'applied' | 'interviewing'
 
 export interface Company {
   id: string
@@ -119,6 +121,8 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'company_careers', name: 'Company Career Pages', enabled: true },
   ],
   dailyTarget: 5,
+  preferredIndustries: [],
+  preferredCompanySizes: [],
   streak: {
     current: 0,
     longest: 0,

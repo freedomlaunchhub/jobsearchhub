@@ -89,7 +89,7 @@ export function serializeCompany(company, userId) {
     linkedin_url: company.linkedinUrl || '',
     size: company.size || '',
     priority: company.priority || 'medium',
-    status: company.status || 'researching',
+    status: company.status || 'new',
     why_dream: company.whyDream || '',
     notes: company.notes || '',
     contact_count: company.contactCount || 0,
@@ -153,6 +153,8 @@ export function deserializeSettings(row) {
       longest: row.streak_longest || 0,
       lastActiveDate: row.last_active_date || '',
     },
+    preferredIndustries: JSON.parse(row.preferred_industries || '[]'),
+    preferredCompanySizes: JSON.parse(row.preferred_company_sizes || '[]'),
     lastDailyRefresh: row.last_daily_refresh || '',
   };
 }

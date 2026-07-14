@@ -54,7 +54,7 @@ export function parseCSV(text: string): string[][] {
 }
 
 const VALID_PRIORITIES = new Set<string>(['high', 'medium', 'low'])
-const VALID_STATUSES = new Set<string>(['open_listing', 'researching', 'networking', 'applied', 'interviewing'])
+const VALID_STATUSES = new Set<string>(['open_listing', 'new', 'researched', 'networking', 'applied', 'interviewing'])
 
 /**
  * Parse a CSV string into an array of partial Company objects.

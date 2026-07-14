@@ -24,7 +24,7 @@ export function useCompanies() {
         linkedinUrl: '',
         size: 'Medium',
         priority: 'medium',
-        status: 'researching',
+        status: 'new',
         whyDream: '',
         notes: '',
         contactCount: 0,

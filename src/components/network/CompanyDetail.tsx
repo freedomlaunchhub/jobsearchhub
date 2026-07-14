@@ -19,7 +19,7 @@ interface CompanyDetailProps {
   onGenerateMessage: (contactId: string) => void;
 }
 
-const COMPANY_STATUSES: CompanyStatus[] = ['open_listing', 'researching', 'networking', 'applied', 'interviewing'];
+const COMPANY_STATUSES: CompanyStatus[] = ['open_listing', 'new', 'researched', 'networking', 'applied', 'interviewing'];
 const PRIORITIES: CompanyPriority[] = ['high', 'medium', 'low'];
 
 export default function CompanyDetail({

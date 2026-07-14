@@ -201,9 +201,9 @@ export function useDailyRefresh({
         total: 1,
       })
 
-      // Phase 2: Research Companies
+      // Phase 2: Research Companies (only 'new' status companies)
       const unresearchedCompanies = companies.filter(
-        (c) => !c.notes || c.notes.trim() === ''
+        (c) => c.status === 'new'
       )
       const totalCompanies = unresearchedCompanies.length
 
@@ -227,6 +227,7 @@ export function useDailyRefresh({
             website: result.website ?? company.website,
             linkedinUrl: result.linkedinUrl ?? company.linkedinUrl,
             size: (result.size as Company['size']) ?? company.size,
+            status: 'researched',
           })
         } catch {
           // Continue on individual research failures

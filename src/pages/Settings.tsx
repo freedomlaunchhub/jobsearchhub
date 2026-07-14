@@ -176,6 +176,37 @@ export default function Settings() {
 
       </Section>
 
+      <Section title="Company Discovery">
+        <Field label="Preferred Industries">
+          <TagInput
+            tags={settings.preferredIndustries}
+            onChange={(preferredIndustries) => updateSettings({ preferredIndustries })}
+            placeholder="Add an industry (e.g., Technology, Energy, Healthcare)..."
+          />
+        </Field>
+
+        <Field label="Preferred Company Sizes">
+          <div className="space-y-2">
+            {['1-50', '51-200', '201-1000', '1001-5000', '5001-10000', '10001+'].map((size) => (
+              <label key={size} className="flex items-center gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.preferredCompanySizes.includes(size)}
+                  onChange={(e) => {
+                    const updated = e.target.checked
+                      ? [...settings.preferredCompanySizes, size]
+                      : settings.preferredCompanySizes.filter((s) => s !== size)
+                    updateSettings({ preferredCompanySizes: updated })
+                  }}
+                  className="rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                {size} employees
+              </label>
+            ))}
+          </div>
+        </Field>
+      </Section>
+
       <Section title="Data Management">
         <div className="flex flex-wrap gap-3">
           <button
