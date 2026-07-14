@@ -177,6 +177,8 @@ export default function NetworkDashboard() {
             onImport={handleImportCompanies}
             onDiscover={handleDiscover}
             canDiscover={canDiscover}
+            preferredIndustries={settings?.preferredIndustries ?? []}
+            preferredSizes={settings?.preferredCompanySizes ?? []}
           />
         </div>
 

@@ -20,6 +20,8 @@ interface CompanyListProps {
   onImport: (csvText: string) => void;
   onDiscover: (overrides?: DiscoverOverrides) => Promise<DiscoverCompaniesResult>;
   canDiscover: boolean;
+  preferredIndustries: string[];
+  preferredSizes: string[];
 }
 
 const PRIORITY_DOT_COLORS: Record<string, string> = {
@@ -61,6 +63,7 @@ const PAGE_RENDER_LIMIT = 250;
 
 export default function CompanyList({
   companies, selectedId, onSelect, onAdd, onImport, onDiscover, canDiscover,
+  preferredIndustries, preferredSizes,
 }: CompanyListProps) {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
@@ -77,17 +80,28 @@ export default function CompanyList({
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<string | null>(null);
   const [showDiscover, setShowDiscover] = useState(false);
-  const [discIndustry, setDiscIndustry] = useState('');
-  const [discSize, setDiscSize] = useState('');
+  const [discIndustries, setDiscIndustries] = useState<string[]>([]);
+  const [discSizes, setDiscSizes] = useState<string[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
 
+  function openDiscover() {
+    if (!showDiscover) {
+      // Start from the preferences saved in Settings (pruned to known values)
+      setDiscIndustries(preferredIndustries.filter((i) => (LINKEDIN_INDUSTRIES as readonly string[]).includes(i)));
+      setDiscSizes(preferredSizes.filter((s) => COMPANY_SIZES.some((cs) => cs.value === s)));
+    }
+    setShowDiscover(!showDiscover);
+    setPreviewCount(null);
+  }
+
+  function toggleValue(list: string[], value: string): string[] {
+    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  }
+
   function discoverOverrides(): DiscoverOverrides {
-    return {
-      // '' = fall back to Settings; '__any' = no filter at all
-      industries: discIndustry === '' ? undefined : discIndustry === '__any' ? [] : [discIndustry],
-      companySizes: discSize === '' ? undefined : discSize === '__any' ? [] : [discSize],
-    };
+    // Empty selection = no filter on that dimension
+    return { industries: discIndustries, companySizes: discSizes };
   }
 
   async function handlePreview() {
@@ -227,7 +241,7 @@ export default function CompanyList({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { setShowDiscover(!showDiscover); setPreviewCount(null); }}
+              onClick={openDiscover}
               disabled={discovering || !canDiscover}
               className="inline-flex items-center gap-1 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
               title={canDiscover ? 'Pull companies matching criteria you choose' : 'Set discovery criteria in Settings first'}
@@ -268,28 +282,42 @@ export default function CompanyList({
         {/* Discover panel: choose criteria per pull, preview count before pulling */}
         {showDiscover && (
           <div className="mb-3 p-3 bg-indigo-50/60 rounded-lg space-y-2">
-            <select
-              value={discIndustry}
-              onChange={(e) => { setDiscIndustry(e.target.value); setPreviewCount(null); }}
-              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              <option value="">All my preferred industries</option>
-              <option value="__any">Any industry</option>
-              {LINKEDIN_INDUSTRIES.map((industry) => (
-                <option key={industry} value={industry}>{industry}</option>
-              ))}
-            </select>
-            <select
-              value={discSize}
-              onChange={(e) => { setDiscSize(e.target.value); setPreviewCount(null); }}
-              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              <option value="">All my preferred sizes</option>
-              <option value="__any">Any size</option>
-              {COMPANY_SIZES.map((size) => (
-                <option key={size.value} value={size.value}>{size.label} employees</option>
-              ))}
-            </select>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1">
+                Industries {discIndustries.length > 0 ? `(${discIndustries.length} selected)` : '(none — any industry)'}
+              </p>
+              <div className="max-h-36 overflow-y-auto rounded-md border border-slate-200 bg-white p-2 space-y-1">
+                {LINKEDIN_INDUSTRIES.map((industry) => (
+                  <label key={industry} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={discIndustries.includes(industry)}
+                      onChange={() => { setDiscIndustries(toggleValue(discIndustries, industry)); setPreviewCount(null); }}
+                      className="rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    {industry}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1">
+                Company sizes {discSizes.length > 0 ? `(${discSizes.length} selected)` : '(none — any size)'}
+              </p>
+              <div className="rounded-md border border-slate-200 bg-white p-2 grid grid-cols-2 gap-1">
+                {COMPANY_SIZES.map((size) => (
+                  <label key={size.value} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={discSizes.includes(size.value)}
+                      onChange={() => { setDiscSizes(toggleValue(discSizes, size.value)); setPreviewCount(null); }}
+                      className="rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    {size.label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"

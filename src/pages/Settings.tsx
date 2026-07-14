@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, LogOut, Compass } from 'lucide-react'
+import { Download, Upload, Trash2, LogOut } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
 import { LINKEDIN_INDUSTRIES, DISCOVERY_COUNTRIES, COMPANY_SIZES } from '@/db/schema'
-import { discoverCompanies } from '@/lib/api'
 import { getAllJobs, saveJobs } from '@/db/jobs'
 import { getAllCompanies, saveCompany } from '@/db/companies'
 import { getAllContacts, saveContact } from '@/db/contacts'
@@ -12,9 +11,6 @@ import { getSettings, saveSettings } from '@/db/settings'
 export default function Settings() {
   const { settings, loading, updateSettings } = useSettings()
   const [confirmClear, setConfirmClear] = useState<string | null>(null)
-  const [discovering, setDiscovering] = useState(false)
-  const [discoverResult, setDiscoverResult] = useState<string | null>(null)
-  const [discoverError, setDiscoverError] = useState(false)
 
   if (loading || !settings) {
     return <div className="text-muted">Loading settings...</div>
@@ -25,61 +21,6 @@ export default function Settings() {
       s.id === sourceId ? { ...s, enabled: !s.enabled } : s
     )
     updateSettings({ jobSources: updated })
-  }
-
-  const handleDiscover = async () => {
-    const hasFilters = settings.preferredIndustries.length > 0 ||
-      settings.preferredCompanySizes.length > 0 ||
-      settings.discoveryCountry
-    if (!hasFilters) return
-
-    setDiscovering(true)
-    setDiscoverResult(null)
-    setDiscoverError(false)
-    // The server returns up to ~100 companies per call with a cursor; keep
-    // calling until the pool is exhausted, with live progress.
-    let saved = 0
-    let seen = 0
-    let totalMatching: number | null = null
-    let cursor: unknown[] | undefined
-    try {
-      do {
-        const result = await discoverCompanies({
-          industries: settings.preferredIndustries.length > 0 ? settings.preferredIndustries : undefined,
-          country: settings.discoveryCountry || undefined,
-          region: settings.discoveryLocation || undefined,
-          companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,
-          searchAfter: cursor,
-        })
-        saved += result.savedCount
-        seen += result.total
-        totalMatching = result.totalMatching ?? totalMatching
-        cursor = result.nextCursor ?? undefined
-        setDiscoverResult(
-          `Pulling companies... ${seen}${totalMatching ? ` of ${totalMatching.toLocaleString()}` : ''} (${saved} new)`
-        )
-      } while (cursor)
-
-      if (saved > 0) {
-        setDiscoverResult(`Added ${saved} new companies to your list`)
-      } else if (seen > 0) {
-        setDiscoverResult(`Found ${seen} companies (all already in your list)`)
-      } else {
-        setDiscoverResult('No companies found — try different criteria')
-        setDiscoverError(true)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      setDiscoverResult(
-        saved > 0
-          ? `Pull interrupted after ${saved} new companies — click again to continue. (${msg})`
-          : `Discovery failed: ${msg}`
-      )
-      setDiscoverError(true)
-    } finally {
-      setDiscovering(false)
-      setTimeout(() => setDiscoverResult(null), 10000)
-    }
   }
 
   const handleExport = async () => {
@@ -148,10 +89,6 @@ export default function Settings() {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     window.location.reload()
   }
-
-  const canDiscover = settings.preferredIndustries.length > 0 ||
-    settings.preferredCompanySizes.length > 0 ||
-    !!settings.discoveryCountry
 
   return (
     <div className="max-w-2xl">
@@ -314,25 +251,10 @@ export default function Settings() {
         </Field>
 
         <div className="mt-4 pt-3 border-t border-slate-100">
-          <p className="text-xs text-muted mb-3">
-            Searches LinkedIn for companies matching your industry, country, and size preferences.
-            New companies are added to your Network HQ list with "New" status.
+          <p className="text-xs text-muted">
+            These preferences pre-fill the Discover panel on Network HQ, where you can
+            preview the match count and pull companies into your list.
           </p>
-          <button
-            onClick={handleDiscover}
-            disabled={discovering || !canDiscover}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-          >
-            <Compass size={16} />
-            {discovering ? 'Discovering...' : 'Discover Companies Now'}
-          </button>
-          {discoverResult && (
-            <p className={`mt-2 text-sm px-3 py-2 rounded-md ${
-              discoverError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-            }`}>
-              {discoverResult}
-            </p>
-          )}
         </div>
       </Section>
 
