@@ -41,8 +41,8 @@ async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }))
-    throw new Error(error.message || `API error: ${response.status}`)
+    const errBody = await response.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(errBody.error || errBody.message || `API error: ${response.status}`)
   }
   return response.json()
 }
