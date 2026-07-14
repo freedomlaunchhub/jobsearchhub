@@ -110,29 +110,36 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
           </div>
         </div>
 
-        {companies.length > 0 && (
-          <div className="mb-3">
-            <button
-              type="button"
-              onClick={onResearchAll}
-              disabled={!!bulkProgress}
-              className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              {bulkProgress
-                ? `Researching ${bulkProgress.current}/${bulkProgress.total}: ${bulkProgress.companyName}`
-                : 'Research All Companies'}
-            </button>
-            {bulkProgress && (
-              <div className="mt-1.5 w-full bg-slate-200 rounded-full h-1.5">
-                <div
-                  className="bg-accent h-1.5 rounded-full transition-all"
-                  style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
-        )}
+        {companies.length > 0 && (() => {
+          const unresearchedCount = companies.filter(
+            (c) => !c.notes || c.notes.trim() === '' || c.contactCount === 0
+          ).length;
+          return (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={onResearchAll}
+                disabled={!!bulkProgress || unresearchedCount === 0}
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                {bulkProgress
+                  ? `Researching ${bulkProgress.current}/${bulkProgress.total}: ${bulkProgress.companyName}`
+                  : unresearchedCount === 0
+                    ? 'All Companies Researched'
+                    : `Research New Companies (${unresearchedCount})`}
+              </button>
+              {bulkProgress && (
+                <div className="mt-1.5 w-full bg-slate-200 rounded-full h-1.5">
+                  <div
+                    className="bg-accent h-1.5 rounded-full transition-all"
+                    style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Add form */}
         {showForm && (

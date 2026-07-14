@@ -59,7 +59,19 @@ export async function onRequestPost(context) {
     const items = Array.isArray(results) ? results : (results.results || []);
 
     if (items.length === 0) {
-      return jsonResponse({ error: `No company data found for "${companyName}"` }, 404);
+      return jsonResponse({
+        name: companyName,
+        website: null,
+        careersUrl: null,
+        linkedinUrl: null,
+        industry: null,
+        size: null,
+        summary: null,
+        headquarters: null,
+        specialties: null,
+        founded: null,
+        notFound: true,
+      });
     }
 
     const company = items[0];

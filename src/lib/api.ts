@@ -72,6 +72,7 @@ export interface CompanyResearchResult {
   headquarters: string | null
   specialties: string | null
   founded: string | null
+  notFound?: boolean
 }
 
 export function researchCompany(params: ResearchCompanyParams) {

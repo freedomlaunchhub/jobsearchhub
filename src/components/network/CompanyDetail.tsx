@@ -39,6 +39,7 @@ export default function CompanyDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [researching, setResearching] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [resultError, setResultError] = useState(false);
 
   function handleAddContact(e: React.FormEvent) {
     e.preventDefault();
@@ -59,25 +60,34 @@ export default function CompanyDetail({
   async function handleResearchAndFind() {
     setResearching(true);
     setResultMessage(null);
+    setResultError(false);
     try {
       const result = await onResearchAndFind();
       if (result) {
         const parts: string[] = [];
         if (result.researchResult === 'done') parts.push('Company info updated');
+        if (result.researchResult === 'failed') parts.push('Company not found in database');
         if (result.findResult) {
           if (result.findResult.savedCount > 0) {
             parts.push(`${result.findResult.savedCount} new contact${result.findResult.savedCount === 1 ? '' : 's'} saved`);
-          } else {
+          } else if (result.findResult.total > 0) {
             parts.push(`${result.findResult.total} people found (all already saved)`);
+          } else {
+            parts.push('No contacts found at this company');
           }
+        } else if (!result.findResult) {
+          parts.push('Contact search unavailable');
         }
+        const hasFailure = result.researchResult === 'failed' && (!result.findResult || result.findResult.total === 0);
+        setResultError(hasFailure);
         setResultMessage(parts.join(' · ') || 'Done');
       }
     } catch {
-      setResultMessage('Research failed');
+      setResultError(true);
+      setResultMessage('Research failed — check your connection and try again');
     } finally {
       setResearching(false);
-      setTimeout(() => setResultMessage(null), 6000);
+      setTimeout(() => setResultMessage(null), 8000);
     }
   }
 
@@ -295,7 +305,11 @@ export default function CompanyDetail({
         </div>
 
         {resultMessage && (
-          <div className="px-3 py-2 bg-emerald-50 text-emerald-700 text-xs rounded-md">
+          <div className={`px-3 py-2 text-xs rounded-md ${
+            resultError
+              ? 'bg-amber-50 text-amber-700'
+              : 'bg-emerald-50 text-emerald-700'
+          }`}>
             {resultMessage}
           </div>
         )}

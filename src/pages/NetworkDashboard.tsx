@@ -63,17 +63,25 @@ export default function NetworkDashboard() {
 
     try {
       const result = await researchCompany({ companyName: company.name })
-      await updateCompany(company.id, {
-        website: result.website || company.website,
-        careersUrl: result.careersUrl || company.careersUrl,
-        linkedinUrl: result.linkedinUrl || company.linkedinUrl,
-        industry: result.industry || company.industry,
-        size: (result.size as Company['size']) || company.size,
-        notes: company.notes
-          ? company.notes + '\n\n' + (result.summary || '')
-          : (result.summary || ''),
-      })
-      researchResult = 'done'
+      if (result.notFound) {
+        researchResult = 'failed'
+      } else {
+        const updates: Partial<Company> = {}
+        if (result.website && !company.website) updates.website = result.website
+        if (result.careersUrl && !company.careersUrl) updates.careersUrl = result.careersUrl
+        if (result.linkedinUrl && !company.linkedinUrl) updates.linkedinUrl = result.linkedinUrl
+        if (result.industry && !company.industry) updates.industry = result.industry
+        if (result.size && !company.size) updates.size = result.size as Company['size']
+        if (result.summary) {
+          updates.notes = company.notes
+            ? company.notes + '\n\n' + result.summary
+            : result.summary
+        }
+        if (Object.keys(updates).length > 0) {
+          await updateCompany(company.id, updates)
+        }
+        researchResult = 'done'
+      }
     } catch {
       researchResult = 'failed'
     }
@@ -102,9 +110,13 @@ export default function NetworkDashboard() {
 
   const handleResearchAll = useCallback(async () => {
     if (bulkProgress) return
-    const total = companies.length
-    for (let i = 0; i < companies.length; i++) {
-      const company = companies[i]
+    const unresearched = companies.filter(
+      (c) => !c.notes || c.notes.trim() === '' || c.contactCount === 0
+    )
+    if (unresearched.length === 0) return
+    const total = unresearched.length
+    for (let i = 0; i < unresearched.length; i++) {
+      const company = unresearched[i]
       setBulkProgress({ current: i + 1, total, companyName: company.name })
       await researchAndFindForCompany(company)
     }
