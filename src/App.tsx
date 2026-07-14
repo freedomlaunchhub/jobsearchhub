@@ -1,10 +1,20 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
 import JobDashboard from '@/pages/JobDashboard'
 import NetworkDashboard from '@/pages/NetworkDashboard'
 import Settings from '@/pages/Settings'
+import { seedIfEmpty } from '@/db/seed'
 
 export default function App() {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    seedIfEmpty().then(() => setReady(true))
+  }, [])
+
+  if (!ready) return null
+
   return (
     <BrowserRouter>
       <Routes>

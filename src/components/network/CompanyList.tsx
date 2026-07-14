@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Search, ArrowUpDown } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Search, ArrowUpDown, Upload } from 'lucide-react';
 import type { Company, CompanyPriority } from '../../db/schema';
 import StatusBadge from '../common/StatusBadge';
 
@@ -8,6 +8,7 @@ interface CompanyListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAdd: (company: Partial<Company>) => void;
+  onImport: (csvText: string) => void;
 }
 
 const PRIORITY_DOT_COLORS: Record<string, string> = {
@@ -22,13 +23,28 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 2,
 };
 
-export default function CompanyList({ companies, selectedId, onSelect, onAdd }: CompanyListProps) {
+export default function CompanyList({ companies, selectedId, onSelect, onAdd, onImport }: CompanyListProps) {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'priority' | 'alpha'>('priority');
   const [formName, setFormName] = useState('');
   const [formIndustry, setFormIndustry] = useState('');
   const [formPriority, setFormPriority] = useState<CompanyPriority>('medium');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        onImport(reader.result);
+      }
+    };
+    reader.readAsText(file);
+    // Reset so the same file can be re-imported
+    e.target.value = '';
+  }
 
   const filtered = companies
     .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
@@ -59,14 +75,31 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd }: 
       <div className="p-4 border-b border-slate-200">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-700">Companies</h2>
-          <button
-            type="button"
-            onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Company
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => setShowForm(!showForm)}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Company
+            </button>
+          </div>
         </div>
 
         {/* Add form */}

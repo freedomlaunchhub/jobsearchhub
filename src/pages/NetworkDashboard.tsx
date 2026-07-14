@@ -8,6 +8,7 @@ import FollowUpQueue from '@/components/network/FollowUpQueue'
 import CompanyList from '@/components/network/CompanyList'
 import CompanyDetail from '@/components/network/CompanyDetail'
 import { researchCompany, researchContact, generateMessage } from '@/lib/api'
+import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
 export default function NetworkDashboard() {
@@ -116,6 +117,13 @@ export default function NetworkDashboard() {
     }
   }
 
+  const handleImportCompanies = async (csvText: string) => {
+    const parsed = parseCompaniesCSV(csvText)
+    for (const partial of parsed) {
+      await addCompany(partial)
+    }
+  }
+
   if (companiesLoading || contactsLoading) {
     return <div className="text-muted">Loading...</div>
   }
@@ -138,6 +146,7 @@ export default function NetworkDashboard() {
             selectedId={selectedCompanyId}
             onSelect={setSelectedCompanyId}
             onAdd={handleAddCompany}
+            onImport={handleImportCompanies}
           />
         </div>
 
