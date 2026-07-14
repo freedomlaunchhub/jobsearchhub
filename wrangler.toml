@@ -12,8 +12,8 @@ compatibility_date = "2026-07-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "job-search-hub"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "dcec46f8-2d3b-46d2-bad6-d053178f1064"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_YOUR_KV_ID"
+id = "bcc11567bd4342a990facce6ea039bcd"
