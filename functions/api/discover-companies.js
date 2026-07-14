@@ -45,6 +45,14 @@ export async function onRequestPost(context) {
     if (region) {
       filters.push({ name: 'headquarters', operator: 'includes', value: region });
     }
+    if (Array.isArray(companySizes) && companySizes.length === 1) {
+      filters.push({ name: 'company_size', operator: 'includes', value: companySizes[0] });
+    } else if (Array.isArray(companySizes) && companySizes.length > 1) {
+      filters.push({
+        operator: 'or',
+        filters: companySizes.map((s) => ({ name: 'company_size', operator: 'includes', value: s })),
+      });
+    }
 
     const searchBody = {
       size: Math.min(limit, 50),
@@ -86,14 +94,7 @@ export async function onRequestPost(context) {
       existingNames = new Set(existing.map((r) => r.name));
     }
 
-    const sizeFiltered = Array.isArray(companySizes) && companySizes.length > 0
-      ? items.filter((c) => {
-          const size = (c.company_size || '').replace(/,/g, '').toLowerCase();
-          return companySizes.some((s) => size.includes(s.toLowerCase()));
-        })
-      : items;
-
-    const companies = sizeFiltered
+    const companies = items
       .filter((c) => c.name)
       .map((c) => ({
         name: c.name,

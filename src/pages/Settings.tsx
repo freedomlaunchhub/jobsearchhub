@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Download, Upload, Trash2, LogOut, Compass } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
-import { LINKEDIN_INDUSTRIES, DISCOVERY_COUNTRIES } from '@/db/schema'
+import { LINKEDIN_INDUSTRIES, DISCOVERY_COUNTRIES, COMPANY_SIZES } from '@/db/schema'
 import { discoverCompanies } from '@/lib/api'
 import { getAllJobs, saveJobs } from '@/db/jobs'
 import { getAllCompanies, saveCompany } from '@/db/companies'
@@ -268,20 +268,20 @@ export default function Settings() {
 
         <Field label="Company Sizes">
           <div className="space-y-2">
-            {['1-50', '51-200', '201-1000', '1001-5000', '5001-10000', '10001+'].map((size) => (
-              <label key={size} className="flex items-center gap-3 text-sm">
+            {COMPANY_SIZES.map((size) => (
+              <label key={size.value} className="flex items-center gap-3 text-sm">
                 <input
                   type="checkbox"
-                  checked={settings.preferredCompanySizes.includes(size)}
+                  checked={settings.preferredCompanySizes.includes(size.value)}
                   onChange={(e) => {
                     const updated = e.target.checked
-                      ? [...settings.preferredCompanySizes, size]
-                      : settings.preferredCompanySizes.filter((s) => s !== size)
+                      ? [...settings.preferredCompanySizes, size.value]
+                      : settings.preferredCompanySizes.filter((s) => s !== size.value)
                     updateSettings({ preferredCompanySizes: updated })
                   }}
                   className="rounded border-slate-300 text-primary focus:ring-primary"
                 />
-                {size} employees
+                {size.label} employees
               </label>
             ))}
           </div>

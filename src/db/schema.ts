@@ -62,6 +62,17 @@ export const LINKEDIN_INDUSTRIES = [
   'Utilities',
 ] as const
 
+export const COMPANY_SIZES = [
+  { value: '2-10', label: '2-10' },
+  { value: '11-50', label: '11-50' },
+  { value: '51-200', label: '51-200' },
+  { value: '201-500', label: '201-500' },
+  { value: '501-1,000', label: '501-1,000' },
+  { value: '1,001-5,000', label: '1,001-5,000' },
+  { value: '5,001-10,000', label: '5,001-10,000' },
+  { value: '10,001+', label: '10,001+' },
+] as const
+
 export const DISCOVERY_COUNTRIES = [
   { code: 'CA', name: 'Canada' },
   { code: 'US', name: 'United States' },
