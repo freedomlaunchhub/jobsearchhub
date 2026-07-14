@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, Search, MessageSquare } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, MessageSquare } from 'lucide-react';
 import { differenceInCalendarDays } from 'date-fns';
 import type { Contact, ConnectionStatus } from '../../db/schema';
 import StatusBadge from '../common/StatusBadge';
@@ -7,7 +7,6 @@ import StatusBadge from '../common/StatusBadge';
 interface ContactCardProps {
   contact: Contact;
   onUpdate: (partial: Partial<Contact>) => void;
-  onResearch: () => void;
   onGenerateMessage: () => void;
 }
 
@@ -26,7 +25,7 @@ function getFollowUpUrgency(dateStr: string | null): { label: string; className:
   return { label: `In ${days}d`, className: 'text-green-600' };
 }
 
-export default function ContactCard({ contact, onUpdate, onResearch, onGenerateMessage }: ContactCardProps) {
+export default function ContactCard({ contact, onUpdate, onGenerateMessage }: ContactCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const urgency = getFollowUpUrgency(contact.nextFollowupDate);
@@ -142,14 +141,6 @@ export default function ContactCard({ contact, onUpdate, onResearch, onGenerateM
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200">
-        <button
-          type="button"
-          onClick={onResearch}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
-        >
-          <Search className="w-3.5 h-3.5" />
-          Research
-        </button>
         <button
           type="button"
           onClick={onGenerateMessage}

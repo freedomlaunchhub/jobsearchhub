@@ -25,7 +25,7 @@ export async function onRequestPost(context) {
   try {
     const body = await request.json();
     const { titles, location, country, includeRemote } = body;
-    const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
+    const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
 
     if (!titles || !Array.isArray(titles) || titles.length === 0) {
       return jsonResponse({ error: 'titles is required and must be a non-empty array' }, 400);

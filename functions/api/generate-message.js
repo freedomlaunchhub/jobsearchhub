@@ -86,7 +86,7 @@ export async function onRequestPost(context) {
       previousMessages,
       additionalContext,
     } = body;
-    const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
+    const anthropicApiKey = env.ANTHROPIC_API_KEY;
 
     if (!contactName) {
       return jsonResponse({ error: 'contactName is required' }, 400);

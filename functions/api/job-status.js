@@ -21,7 +21,7 @@ export async function onRequestPost(context) {
   try {
     const body = await request.json();
     const { snapshotId } = body;
-    const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
+    const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
 
     if (!snapshotId) {
       return jsonResponse({ error: 'snapshotId is required' }, 400);

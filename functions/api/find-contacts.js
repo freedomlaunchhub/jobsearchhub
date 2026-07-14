@@ -11,168 +11,139 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
+
 const DEFAULT_TARGET_ROLES = [
-  'VP Product',
-  'Director PMO',
-  'Head of Product',
-  'VP Engineering',
-  'Director of Change Management',
-  'Chief Product Officer',
+  'Senior Manager',
+  'Director',
+  'Project Manager',
+  'Program Manager',
+  'Recruiter',
+  'Talent Acquisition',
 ];
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
+  const { request, env, data } = context;
 
   try {
     const body = await request.json();
     const {
       companyName,
-      industry,
+      companyId,
       targetRoles = DEFAULT_TARGET_ROLES,
+      autoSave = true,
     } = body;
-    const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
-    const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
-    const brightDataZone = body.brightDataZone || env.BRIGHT_DATA_ZONE || 'serp_api';
+    const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
+    const userId = data.user?.userId;
 
     if (!companyName) {
       return jsonResponse({ error: 'companyName is required' }, 400);
     }
     if (!brightDataApiKey) {
-      return jsonResponse({ error: 'brightDataApiKey is required' }, 400);
-    }
-    if (!anthropicApiKey) {
-      return jsonResponse({ error: 'anthropicApiKey is required' }, 400);
+      return jsonResponse({ error: 'Bright Data API key not configured on server' }, 500);
     }
 
-    // Step 1: Batch roles into groups of 2-3 and run SERP searches
-    const roleBatches = [];
-    for (let i = 0; i < targetRoles.length; i += 3) {
-      roleBatches.push(targetRoles.slice(i, i + 3));
-    }
-
-    const serpPromises = roleBatches.map((batch) => {
-      const roleQuery = batch.map((role) => `"${role}"`).join(' OR ');
-      const query = `"${companyName}" ${roleQuery} site:linkedin.com/in`;
-      return fetchSerp(query, brightDataApiKey, brightDataZone);
-    });
-
-    const serpResults = await Promise.all(serpPromises);
-
-    // Step 2: Use Anthropic to extract structured contacts from search results
-    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 3072,
-        messages: [
-          {
-            role: 'user',
-            content: `You are a professional networking research assistant. Analyze the following search results and extract key contacts at ${companyName}${industry ? ` (industry: ${industry})` : ''}.
-
-Target roles we are looking for: ${targetRoles.join(', ')}
-
-Search results:
-${JSON.stringify(serpResults, null, 2)}
-
-Return a JSON object with a single field "contacts" containing an array of up to 5 contacts. Each contact should have:
-- "name": The person's full name
-- "title": Their job title
-- "linkedinUrl": Their LinkedIn profile URL (must be a linkedin.com/in/ URL)
-- "company": The company they work at (should be "${companyName}" or a close variant)
-
-Rules:
-- Only include people you are confident actually work at ${companyName} based on the search results
-- Deduplicate by name -- if the same person appears multiple times, include them only once
-- Prioritize the target roles listed above
-- Maximum 5 contacts
-- Only include contacts where you have reasonable confidence in the data
-- If a LinkedIn URL is not available, omit the linkedinUrl field
-
-Return ONLY valid JSON, no other text.`,
-          },
+    const searchBody = {
+      filter: {
+        operator: 'and',
+        filters: [
+          { name: 'current_company_name', value: companyName, operator: 'contains' },
         ],
-      }),
-    });
+      },
+      limit: 10,
+    };
 
-    if (!anthropicResponse.ok) {
-      const text = await anthropicResponse.text();
-      return jsonResponse({ error: `Anthropic API error (${anthropicResponse.status}): ${text}` }, 502);
-    }
-
-    const anthropicData = await anthropicResponse.json();
-    const content = anthropicData.content[0].text;
-
-    // Extract JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return jsonResponse({ error: 'Failed to parse contacts from AI response' }, 500);
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    // Deduplicate by name (case-insensitive) and limit to 5
-    const seen = new Set();
-    const dedupedContacts = [];
-    for (const contact of parsed.contacts || []) {
-      const key = contact.name.toLowerCase().trim();
-      if (!seen.has(key)) {
-        seen.add(key);
-        dedupedContacts.push(contact);
+    const response = await fetch(
+      `https://api.brightdata.com/datasets/search/${PEOPLE_DATASET_ID}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${brightDataApiKey}`,
+        },
+        body: JSON.stringify(searchBody),
       }
-      if (dedupedContacts.length >= 5) break;
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      return jsonResponse({ error: `Bright Data error (${response.status}): ${text}` }, 502);
+    }
+
+    const results = await response.json();
+    const items = Array.isArray(results) ? results : (results.results || []);
+
+    const roleLower = targetRoles.map((r) => r.toLowerCase());
+    const scored = items.map((person) => {
+      const position = (person.position || person.title || '').toLowerCase();
+      const roleMatch = roleLower.some((r) => position.includes(r));
+      return { person, roleMatch };
+    });
+    scored.sort((a, b) => (b.roleMatch ? 1 : 0) - (a.roleMatch ? 1 : 0));
+
+    const seen = new Set();
+    const contacts = [];
+    for (const { person } of scored) {
+      const linkedinUrl = person.url || person.linkedin_url || '';
+      const name = person.name || person.full_name || '';
+      if (!name) continue;
+      const key = linkedinUrl ? linkedinUrl.toLowerCase().replace(/\/+$/, '') : name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      contacts.push({
+        name,
+        title: person.position || person.title || '',
+        linkedinUrl,
+        city: person.city || '',
+        about: person.about || '',
+      });
+      if (contacts.length >= 10) break;
+    }
+
+    let savedCount = 0;
+    if (autoSave && userId && companyId && contacts.length > 0) {
+      for (const contact of contacts) {
+        const existingLinkedin = contact.linkedinUrl
+          ? await env.DB.prepare(
+              'SELECT id FROM contacts WHERE user_id = ? AND linkedin_url = ?'
+            ).bind(userId, contact.linkedinUrl).first()
+          : null;
+        if (existingLinkedin) continue;
+
+        const existingName = await env.DB.prepare(
+          'SELECT id FROM contacts WHERE user_id = ? AND company_id = ? AND LOWER(name) = LOWER(?)'
+        ).bind(userId, companyId, contact.name).first();
+        if (existingName) continue;
+
+        const id = crypto.randomUUID();
+        await env.DB.prepare(
+          `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, other_social, rapport_notes, connection_status, connection_date, last_contact_date, next_followup_date, message_drafts, notes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'identified', NULL, NULL, NULL, '[]', '', ?)`
+        ).bind(
+          id, userId, companyId, companyName,
+          contact.name, contact.title, contact.linkedinUrl,
+          contact.about,
+          new Date().toISOString()
+        ).run();
+        savedCount++;
+      }
+
+      if (savedCount > 0) {
+        await env.DB.prepare(
+          'UPDATE companies SET contact_count = (SELECT COUNT(*) FROM contacts WHERE company_id = ? AND user_id = ?) WHERE id = ? AND user_id = ?'
+        ).bind(companyId, userId, companyId, userId).run();
+      }
     }
 
     return jsonResponse({
-      contacts: dedupedContacts,
+      contacts,
       companyName,
+      savedCount,
       searchedAt: new Date().toISOString(),
     });
   } catch (err) {
     console.error('find-contacts error:', err);
     return jsonResponse({ error: err.message || 'Internal server error' }, 500);
-  }
-}
-
-async function fetchSerp(query, brightDataApiKey, zone) {
-  try {
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&gl=ca&brd_json=1`;
-    const response = await fetch('https://api.brightdata.com/request', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${brightDataApiKey}`,
-      },
-      body: JSON.stringify({
-        zone,
-        url: searchUrl,
-        format: 'raw',
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`Bright Data SERP error for "${query}": ${text}`);
-      return null;
-    }
-
-    const text = await response.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { raw: text.slice(0, 5000) };
-    }
-  } catch (err) {
-    console.error(`Bright Data SERP error for "${query}":`, err.message);
-    return null;
   }
 }
 

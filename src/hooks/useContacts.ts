@@ -122,6 +122,11 @@ export function useContacts() {
     []
   )
 
+  const refresh = useCallback(async () => {
+    const loaded = await getAllContacts()
+    setContacts(loaded)
+  }, [])
+
   return {
     contacts,
     loading,
@@ -132,5 +137,6 @@ export function useContacts() {
     overdueFollowups,
     snoozeFollowup,
     markFollowupDone,
+    refresh,
   }
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, Eye, EyeOff, RefreshCw, LogOut } from 'lucide-react'
+import { Download, Upload, Trash2, RefreshCw, LogOut } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
 import { getAllJobs, saveJobs } from '@/db/jobs'
@@ -9,8 +9,6 @@ import { getSettings, saveSettings } from '@/db/settings'
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useSettings()
-  const [showBrightDataKey, setShowBrightDataKey] = useState(false)
-  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
   const [confirmClear, setConfirmClear] = useState<string | null>(null)
 
   if (loading || !settings) {
@@ -175,49 +173,6 @@ export default function Settings() {
             <span className="text-sm text-muted">applications per day</span>
           </div>
         </Field>
-      </Section>
-
-      <Section title="API Configuration">
-        <Field label="Bright Data API Key">
-          <div className="relative">
-            <input
-              type={showBrightDataKey ? 'text' : 'password'}
-              value={settings.brightDataApiKey}
-              onChange={(e) => updateSettings({ brightDataApiKey: e.target.value })}
-              placeholder="Enter your Bright Data API key"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            />
-            <button
-              onClick={() => setShowBrightDataKey(!showBrightDataKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-slate-700"
-            >
-              {showBrightDataKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-        </Field>
-
-        <Field label="Anthropic API Key">
-          <div className="relative">
-            <input
-              type={showAnthropicKey ? 'text' : 'password'}
-              value={settings.anthropicApiKey}
-              onChange={(e) => updateSettings({ anthropicApiKey: e.target.value })}
-              placeholder="Enter your Anthropic API key"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            />
-            <button
-              onClick={() => setShowAnthropicKey(!showAnthropicKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-slate-700"
-            >
-              {showAnthropicKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-        </Field>
-
-        <p className="text-xs text-muted mb-4">
-          Optional. API keys are configured on the server, so you can leave these blank. Keys
-          entered here are stored in your browser and override the server keys.
-        </p>
 
         <button
           onClick={() => window.dispatchEvent(new Event('run-daily-briefing'))}

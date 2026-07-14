@@ -7,7 +7,7 @@ import Dream100Progress from '@/components/network/Dream100Progress'
 import FollowUpQueue from '@/components/network/FollowUpQueue'
 import CompanyList from '@/components/network/CompanyList'
 import CompanyDetail from '@/components/network/CompanyDetail'
-import { researchCompany, researchContact, generateMessage } from '@/lib/api'
+import { researchCompany, findContacts, generateMessage } from '@/lib/api'
 import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
@@ -15,7 +15,7 @@ export default function NetworkDashboard() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const { settings } = useSettings()
   const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts } = useCompanies()
-  const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone } = useContacts()
+  const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone, refresh: refreshContacts } = useContacts()
   const { incrementField } = useDailyLog()
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId) ?? null
@@ -51,46 +51,39 @@ export default function NetworkDashboard() {
   }
 
   const handleResearchCompany = async () => {
-    if (!selectedCompany || !settings) return
+    if (!selectedCompany) return
     try {
       const result = await researchCompany({
         companyName: selectedCompany.name,
-        location: settings.location,
-        brightDataApiKey: settings.brightDataApiKey,
-        anthropicApiKey: settings.anthropicApiKey,
-      }) as Record<string, unknown>
+      })
       await updateCompany(selectedCompany.id, {
-        website: (result.website as string) || selectedCompany.website,
-        careersUrl: (result.careersUrl as string) || selectedCompany.careersUrl,
-        linkedinUrl: (result.linkedinUrl as string) || selectedCompany.linkedinUrl,
-        industry: (result.industry as string) || selectedCompany.industry,
+        website: result.website || selectedCompany.website,
+        careersUrl: result.careersUrl || selectedCompany.careersUrl,
+        linkedinUrl: result.linkedinUrl || selectedCompany.linkedinUrl,
+        industry: result.industry || selectedCompany.industry,
         size: (result.size as Company['size']) || selectedCompany.size,
-        notes: selectedCompany.notes + '\n\n' + ((result.summary as string) || ''),
+        notes: selectedCompany.notes
+          ? selectedCompany.notes + '\n\n' + (result.summary || '')
+          : (result.summary || ''),
       })
     } catch {
-      // API not configured or failed
+      // API failed silently
     }
   }
 
-  const handleResearchContact = async (contactId: string) => {
-    if (!settings) return
-    const contact = selectedContacts.find((c) => c.id === contactId)
-    if (!contact) return
+  const handleFindPeople = async () => {
+    if (!selectedCompany) return
     try {
-      const result = await researchContact({
-        name: contact.name,
-        title: contact.title,
-        company: contact.companyName,
-        linkedinUrl: contact.linkedinUrl,
-        brightDataApiKey: settings.brightDataApiKey,
-        anthropicApiKey: settings.anthropicApiKey,
-      }) as Record<string, unknown>
-      await updateContact(contactId, {
-        rapportNotes: (result.rapportNotes as string) || contact.rapportNotes,
-        messageDrafts: (result.connectionMessages as string[]) || contact.messageDrafts,
+      const result = await findContacts({
+        companyName: selectedCompany.name,
+        companyId: selectedCompany.id,
       })
+      if (result.savedCount > 0) {
+        await refreshContacts()
+      }
+      return result
     } catch {
-      // API not configured or failed
+      // API failed silently
     }
   }
 
@@ -107,13 +100,12 @@ export default function NetworkDashboard() {
         messageType: 'connection',
         previousMessages: contact.messageDrafts,
         additionalContext: '',
-        anthropicApiKey: settings.anthropicApiKey,
       })
       await updateContact(contactId, {
         messageDrafts: [...contact.messageDrafts, result.message],
       })
     } catch {
-      // API not configured or failed
+      // API failed silently
     }
   }
 
@@ -160,7 +152,7 @@ export default function NetworkDashboard() {
               onUpdateContact={updateContact}
               onDeleteCompany={handleDeleteCompany}
               onResearchCompany={handleResearchCompany}
-              onResearchContact={handleResearchContact}
+              onFindPeople={handleFindPeople}
               onGenerateMessage={handleGenerateMessage}
             />
           ) : (

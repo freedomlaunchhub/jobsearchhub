@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import type { Job, Company, Contact, Settings } from '@/db/schema'
-import { searchJobs, checkJobStatus, researchCompany, researchContact, generateMessage, findContacts } from '@/lib/api'
+import { searchJobs, checkJobStatus, researchCompany, generateMessage, findContacts } from '@/lib/api'
 import type { SearchJobsResult } from '@/lib/api'
 import { getSettings, saveSettings } from '@/db/settings'
 
@@ -129,7 +129,6 @@ export function useDailyRefresh({
         location: settings.location,
         includeRemote: settings.remoteIncluded,
         country: 'CA',
-        brightDataApiKey: settings.brightDataApiKey,
       })
 
       let rawJobs: unknown[] = []
@@ -158,7 +157,6 @@ export function useDailyRefresh({
 
           const statusResult = await checkJobStatus({
             snapshotId: searchResult.snapshotId,
-            brightDataApiKey: settings.brightDataApiKey,
           })
 
           if (statusResult.jobs && statusResult.jobs.length > 0) {
@@ -216,18 +214,14 @@ export function useDailyRefresh({
         try {
           const result = await researchCompany({
             companyName: company.name,
-            location: settings.location,
-            brightDataApiKey: settings.brightDataApiKey,
-            anthropicApiKey: settings.anthropicApiKey,
           })
 
-          const researchData = result as Record<string, unknown>
           await updateCompany(company.id, {
-            notes: (researchData.notes as string) ?? '',
-            industry: (researchData.industry as string) ?? company.industry,
-            website: (researchData.website as string) ?? company.website,
-            linkedinUrl: (researchData.linkedinUrl as string) ?? company.linkedinUrl,
-            size: (researchData.size as Company['size']) ?? company.size,
+            notes: result.summary ?? company.notes,
+            industry: result.industry ?? company.industry,
+            website: result.website ?? company.website,
+            linkedinUrl: result.linkedinUrl ?? company.linkedinUrl,
+            size: (result.size as Company['size']) ?? company.size,
           })
         } catch {
           // Continue on individual research failures
@@ -257,26 +251,12 @@ export function useDailyRefresh({
       for (let i = 0; i < companiesWithNoContacts.length; i++) {
         const company = companiesWithNoContacts[i]
         try {
-          const result = await findContacts({
+          await findContacts({
             companyName: company.name,
-            industry: company.industry,
+            companyId: company.id,
             targetRoles: ['Hiring Manager', 'Recruiter', 'HR Director'],
-            brightDataApiKey: settings.brightDataApiKey,
-            anthropicApiKey: settings.anthropicApiKey,
+            autoSave: true,
           })
-
-          if (result.contacts && Array.isArray(result.contacts)) {
-            for (const contactData of result.contacts) {
-              await addContact({
-                companyId: company.id,
-                companyName: company.name,
-                name: contactData.name,
-                title: contactData.title,
-                linkedinUrl: contactData.linkedinUrl,
-              })
-              await delay(100)
-            }
-          }
         } catch {
           // Continue on individual find failures
         }
@@ -291,51 +271,7 @@ export function useDailyRefresh({
         await delay(500)
       }
 
-      // Phase 4: Research Contacts
-      const unresearchedContacts = contacts.filter(
-        (c) => !c.rapportNotes || c.rapportNotes.trim() === ''
-      )
-      const totalResearchContacts = unresearchedContacts.length
-
-      setProgress({
-        phase: 'Researching contacts',
-        detail: `Researching contacts... (0/${totalResearchContacts})`,
-        current: 0,
-        total: totalResearchContacts,
-      })
-
-      for (let i = 0; i < unresearchedContacts.length; i++) {
-        const contact = unresearchedContacts[i]
-        try {
-          const result = await researchContact({
-            name: contact.name,
-            title: contact.title,
-            company: contact.companyName,
-            linkedinUrl: contact.linkedinUrl,
-            brightDataApiKey: settings.brightDataApiKey,
-            anthropicApiKey: settings.anthropicApiKey,
-          })
-
-          const researchData = result as Record<string, unknown>
-          await updateContact(contact.id, {
-            rapportNotes: (researchData.rapportNotes as string) ?? '',
-            messageDrafts: (researchData.messageDrafts as string[]) ?? contact.messageDrafts,
-          })
-        } catch {
-          // Continue on individual research failures
-        }
-
-        setProgress({
-          phase: 'Researching contacts',
-          detail: `Researching contacts... (${i + 1}/${totalResearchContacts})`,
-          current: i + 1,
-          total: totalResearchContacts,
-        })
-
-        await delay(500)
-      }
-
-      // Phase 5: Generate Messages
+      // Phase 4: Generate Messages
       const contactsNeedingMessages = contacts.filter(
         (c) => !c.messageDrafts || c.messageDrafts.length === 0
       )
@@ -359,7 +295,6 @@ export function useDailyRefresh({
             messageType: 'connection',
             previousMessages: [],
             additionalContext: '',
-            anthropicApiKey: settings.anthropicApiKey,
           })
 
           await updateContact(contact.id, {

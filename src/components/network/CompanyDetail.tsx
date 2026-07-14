@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink, Plus, Trash2, Search } from 'lucide-react';
+import { ExternalLink, Plus, Trash2, Search, Users } from 'lucide-react';
 import type { Company, Contact, CompanyStatus, CompanyPriority } from '../../db/schema';
 import ContactCard from './ContactCard';
 
@@ -11,7 +11,7 @@ interface CompanyDetailProps {
   onUpdateContact: (id: string, partial: Partial<Contact>) => void;
   onDeleteCompany: () => void;
   onResearchCompany: () => void;
-  onResearchContact: (contactId: string) => void;
+  onFindPeople: () => Promise<{ savedCount: number; contacts: unknown[] } | undefined>;
   onGenerateMessage: (contactId: string) => void;
 }
 
@@ -26,7 +26,7 @@ export default function CompanyDetail({
   onUpdateContact,
   onDeleteCompany,
   onResearchCompany,
-  onResearchContact,
+  onFindPeople,
   onGenerateMessage,
 }: CompanyDetailProps) {
   const [showContactForm, setShowContactForm] = useState(false);
@@ -34,6 +34,8 @@ export default function CompanyDetail({
   const [contactTitle, setContactTitle] = useState('');
   const [contactLinkedin, setContactLinkedin] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [findingPeople, setFindingPeople] = useState(false);
+  const [findPeopleResult, setFindPeopleResult] = useState<string | null>(null);
 
   function handleAddContact(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +51,26 @@ export default function CompanyDetail({
     setContactTitle('');
     setContactLinkedin('');
     setShowContactForm(false);
+  }
+
+  async function handleFindPeople() {
+    setFindingPeople(true);
+    setFindPeopleResult(null);
+    try {
+      const result = await onFindPeople();
+      if (result) {
+        setFindPeopleResult(
+          result.savedCount > 0
+            ? `Found and saved ${result.savedCount} new contact${result.savedCount === 1 ? '' : 's'}`
+            : `Found ${result.contacts.length} people (all already saved)`
+        );
+      }
+    } catch {
+      setFindPeopleResult('Failed to find people');
+    } finally {
+      setFindingPeople(false);
+      setTimeout(() => setFindPeopleResult(null), 5000);
+    }
   }
 
   return (
@@ -160,15 +182,32 @@ export default function CompanyDetail({
           <h3 className="text-sm font-semibold text-slate-700">
             Contacts ({contacts.length})
           </h3>
-          <button
-            type="button"
-            onClick={() => setShowContactForm(!showContactForm)}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Contact
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleFindPeople}
+              disabled={findingPeople}
+              className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              <Users className="w-3.5 h-3.5" />
+              {findingPeople ? 'Searching...' : 'Find People'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowContactForm(!showContactForm)}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Contact
+            </button>
+          </div>
         </div>
+
+        {findPeopleResult && (
+          <div className="mb-3 px-3 py-2 bg-emerald-50 text-emerald-700 text-xs rounded-md">
+            {findPeopleResult}
+          </div>
+        )}
 
         {/* Add contact form */}
         {showContactForm && (
@@ -212,7 +251,6 @@ export default function CompanyDetail({
               key={contact.id}
               contact={contact}
               onUpdate={(partial) => onUpdateContact(contact.id, partial)}
-              onResearch={() => onResearchContact(contact.id)}
               onGenerateMessage={() => onGenerateMessage(contact.id)}
             />
           ))}

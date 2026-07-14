@@ -34,7 +34,6 @@ export default function JobDashboard() {
         location: settings.location,
         includeRemote: settings.remoteIncluded,
         country: 'CA',
-        brightDataApiKey: settings.brightDataApiKey,
       })
 
       let rawJobs = result.jobs || []
@@ -45,7 +44,6 @@ export default function JobDashboard() {
           await new Promise((r) => setTimeout(r, 5000))
           const status = await checkJobStatus({
             snapshotId: result.snapshotId,
-            brightDataApiKey: settings.brightDataApiKey,
           })
           if (status.jobs && status.jobs.length > 0) {
             rawJobs = status.jobs

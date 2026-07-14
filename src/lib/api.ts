@@ -3,23 +3,10 @@ interface SearchJobsParams {
   location: string
   includeRemote: boolean
   country?: string
-  brightDataApiKey: string
 }
 
 interface ResearchCompanyParams {
   companyName: string
-  location: string
-  brightDataApiKey: string
-  anthropicApiKey: string
-}
-
-interface ResearchContactParams {
-  name: string
-  title: string
-  company: string
-  linkedinUrl: string
-  brightDataApiKey: string
-  anthropicApiKey: string
 }
 
 interface GenerateMessageParams {
@@ -30,18 +17,20 @@ interface GenerateMessageParams {
   messageType: 'connection' | 'follow_up' | 'thank_you' | 'check_in'
   previousMessages: string[]
   additionalContext: string
-  anthropicApiKey: string
 }
 
-interface JobStatusParams {
-  snapshotId: string
-  brightDataApiKey: string
+interface FindContactsParams {
+  companyName: string
+  companyId: string
+  targetRoles?: string[]
+  autoSave?: boolean
 }
 
 async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(body),
   })
   if (!response.ok) {
@@ -68,33 +57,38 @@ export interface JobStatusResult {
   error?: string
 }
 
-export function checkJobStatus(params: JobStatusParams) {
+export function checkJobStatus(params: { snapshotId: string }) {
   return apiCall<JobStatusResult>('job-status', params)
 }
 
-export function researchCompany(params: ResearchCompanyParams) {
-  return apiCall('research-company', params)
+export interface CompanyResearchResult {
+  name: string
+  website: string | null
+  careersUrl: string | null
+  linkedinUrl: string | null
+  industry: string | null
+  size: string | null
+  summary: string | null
+  headquarters: string | null
+  specialties: string | null
+  founded: string | null
 }
 
-export function researchContact(params: ResearchContactParams) {
-  return apiCall('research-contact', params)
+export function researchCompany(params: ResearchCompanyParams) {
+  return apiCall<CompanyResearchResult>('research-company', params)
 }
 
 export function generateMessage(params: GenerateMessageParams) {
   return apiCall<{ message: string }>('generate-message', params)
 }
 
-interface FindContactsParams {
+export interface FindContactsResult {
+  contacts: Array<{ name: string; title: string; linkedinUrl: string; city: string; about: string }>
   companyName: string
-  industry: string
-  targetRoles: string[]
-  brightDataApiKey: string
-  anthropicApiKey: string
+  savedCount: number
+  searchedAt: string
 }
 
 export function findContacts(params: FindContactsParams) {
-  return apiCall<{ contacts: Array<{ name: string; title: string; linkedinUrl: string }> }>(
-    'find-contacts',
-    params
-  )
+  return apiCall<FindContactsResult>('find-contacts', params)
 }
