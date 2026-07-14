@@ -2,9 +2,8 @@ interface SearchJobsParams {
   titles: string[]
   location: string
   includeRemote: boolean
-  sources: string[]
+  country?: string
   brightDataApiKey: string
-  anthropicApiKey: string
 }
 
 interface ResearchCompanyParams {
@@ -34,6 +33,11 @@ interface GenerateMessageParams {
   anthropicApiKey: string
 }
 
+interface JobStatusParams {
+  snapshotId: string
+  brightDataApiKey: string
+}
+
 async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/${endpoint}`, {
     method: 'POST',
@@ -47,8 +51,25 @@ async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
   return response.json()
 }
 
+export interface SearchJobsResult {
+  jobs?: unknown[]
+  pending?: boolean
+  snapshotId?: string
+  error?: string
+}
+
 export function searchJobs(params: SearchJobsParams) {
-  return apiCall('search-jobs', params)
+  return apiCall<SearchJobsResult>('search-jobs', params)
+}
+
+export interface JobStatusResult {
+  jobs?: unknown[]
+  pending?: boolean
+  error?: string
+}
+
+export function checkJobStatus(params: JobStatusParams) {
+  return apiCall<JobStatusResult>('job-status', params)
 }
 
 export function researchCompany(params: ResearchCompanyParams) {

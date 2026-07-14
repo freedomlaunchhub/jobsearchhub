@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import type { Job, Company, Contact, Settings } from '@/db/schema'
-import { searchJobs, researchCompany, researchContact, generateMessage, findContacts } from '@/lib/api'
+import { searchJobs, checkJobStatus, researchCompany, researchContact, generateMessage, findContacts } from '@/lib/api'
+import type { SearchJobsResult } from '@/lib/api'
 import { getSettings, saveSettings } from '@/db/settings'
 
 interface Progress {
@@ -43,6 +44,38 @@ function getTodayDate(): string {
   return `${year}-${month}-${day}`
 }
 
+function mapLinkedInJob(raw: Record<string, unknown>): Job {
+  const salaryParts: string[] = []
+  const baseSalary = raw.base_salary as Record<string, unknown> | null
+  if (baseSalary && baseSalary.min_amount != null) {
+    const currency = (baseSalary.currency as string) || '$'
+    const min = baseSalary.min_amount
+    const max = baseSalary.max_amount
+    const period = (baseSalary.payment_period as string) || ''
+    salaryParts.push(max ? `${currency}${min}-${currency}${max}/${period}` : `${currency}${min}/${period}`)
+  }
+  const payRange = (raw.job_base_pay_range as string) || null
+
+  return {
+    id: (raw.job_posting_id as string) || crypto.randomUUID(),
+    title: (raw.job_title as string) || '',
+    company: (raw.company_name as string) || '',
+    location: (raw.job_location as string) || '',
+    remote: ((raw.job_location as string) || '').toLowerCase().includes('remote'),
+    source: 'linkedin',
+    sourceUrl: (raw.url as string) || (raw.apply_link as string) || '',
+    postedDate: (raw.job_posted_date as string) || new Date().toISOString().split('T')[0],
+    description: (raw.job_summary as string) || (raw.job_description_formatted as string) || '',
+    salaryRange: salaryParts[0] || payRange || null,
+    requirements: [],
+    status: 'new' as const,
+    statusHistory: [{ status: 'new' as const, date: new Date().toISOString() }],
+    notes: '',
+    appliedDate: null,
+    createdAt: new Date().toISOString(),
+  }
+}
+
 export function useDailyRefresh({
   settings,
   jobs,
@@ -83,76 +116,70 @@ export function useDailyRefresh({
     abortRef.current = false
 
     try {
-      // Phase 1: Search Jobs
-      const enabledSources = settings.jobSources.filter((s) => s.enabled)
-      const searchCombinations = settings.jobTitles.length * enabledSources.length
-      let searchIndex = 0
-
+      // Phase 1: Search Jobs via Bright Data LinkedIn Dataset
       setProgress({
         phase: 'Searching for jobs',
-        detail: `Searching for jobs... (0/${searchCombinations})`,
+        detail: 'Triggering LinkedIn job search...',
         current: 0,
-        total: searchCombinations,
+        total: 1,
       })
 
-      const allNewJobs: Job[] = []
-      let firstSearchError: string | null = null
+      const searchResult: SearchJobsResult = await searchJobs({
+        titles: settings.jobTitles,
+        location: settings.location,
+        includeRemote: settings.remoteIncluded,
+        country: 'CA',
+        brightDataApiKey: settings.brightDataApiKey,
+      })
 
-      for (const source of enabledSources) {
-        try {
-          const result = (await searchJobs({
-            titles: settings.jobTitles,
-            location: settings.location,
-            includeRemote: settings.remoteIncluded,
-            sources: [source.id],
-            brightDataApiKey: settings.brightDataApiKey,
-            anthropicApiKey: settings.anthropicApiKey,
-          })) as { jobs?: unknown[]; error?: string }
+      let rawJobs: unknown[] = []
 
-          if (result.error && !firstSearchError) {
-            firstSearchError = result.error
-          }
-
-          const mapped: Job[] = (result.jobs || []).map((j: unknown) => {
-            const raw = j as Record<string, unknown>
-            return {
-              id: crypto.randomUUID(),
-              title: (raw.title as string) || '',
-              company: (raw.company as string) || '',
-              location: (raw.location as string) || '',
-              remote: (raw.remote as boolean) || false,
-              source: (raw.source as string) || source.id,
-              sourceUrl: (raw.url as string) || (raw.sourceUrl as string) || '',
-              postedDate: (raw.postedDate as string) || new Date().toISOString().split('T')[0],
-              description: (raw.description as string) || '',
-              salaryRange: (raw.salary as string) || (raw.salaryRange as string) || null,
-              requirements: (raw.requirements as string[]) || [],
-              status: 'new' as const,
-              statusHistory: [{ status: 'new' as const, date: new Date().toISOString() }],
-              notes: '',
-              appliedDate: null,
-              createdAt: new Date().toISOString(),
-            }
-          })
-          allNewJobs.push(...mapped.filter((j) => j.title && j.company))
-        } catch (err) {
-          if (!firstSearchError) {
-            firstSearchError = err instanceof Error ? err.message : 'Job search failed'
-          }
-        }
-
-        searchIndex++
+      if (searchResult.jobs && searchResult.jobs.length > 0) {
+        rawJobs = searchResult.jobs
+      } else if (searchResult.pending && searchResult.snapshotId) {
+        // Poll for results
         setProgress({
           phase: 'Searching for jobs',
-          detail: `Searching for jobs... (${searchIndex}/${searchCombinations})`,
-          current: searchIndex,
-          total: searchCombinations,
+          detail: 'Waiting for LinkedIn results...',
+          current: 0,
+          total: 1,
         })
 
-        await delay(500)
+        const maxPolls = 30
+        for (let i = 0; i < maxPolls; i++) {
+          await delay(5000)
+
+          setProgress({
+            phase: 'Searching for jobs',
+            detail: `Waiting for LinkedIn results... (${i + 1}/${maxPolls})`,
+            current: 0,
+            total: 1,
+          })
+
+          const statusResult = await checkJobStatus({
+            snapshotId: searchResult.snapshotId,
+            brightDataApiKey: settings.brightDataApiKey,
+          })
+
+          if (statusResult.jobs && statusResult.jobs.length > 0) {
+            rawJobs = statusResult.jobs
+            break
+          }
+
+          if (!statusResult.pending) {
+            break
+          }
+        }
+      } else if (searchResult.error) {
+        throw new Error(`Job search failed: ${searchResult.error}`)
       }
 
-      // Deduplicate against existing jobs by title + company
+      // Map LinkedIn dataset fields to Job schema
+      const allNewJobs: Job[] = rawJobs
+        .map((j) => mapLinkedInJob(j as Record<string, unknown>))
+        .filter((j) => j.title && j.company)
+
+      // Deduplicate against existing jobs
       const existingKeys = new Set(
         jobs.map((j) => `${j.title.toLowerCase()}|${j.company.toLowerCase()}`)
       )
@@ -161,15 +188,15 @@ export function useDailyRefresh({
       )
 
       if (uniqueNewJobs.length > 0) {
-        const jobsWithStatus = uniqueNewJobs.map((j) => ({
-          ...j,
-          status: 'new' as const,
-        }))
-        await addJobs(jobsWithStatus)
-      } else if (firstSearchError) {
-        // Every search failed — surface the real reason instead of silently continuing
-        throw new Error(`Job search failed: ${firstSearchError}`)
+        await addJobs(uniqueNewJobs)
       }
+
+      setProgress({
+        phase: 'Searching for jobs',
+        detail: `Found ${uniqueNewJobs.length} new jobs`,
+        current: 1,
+        total: 1,
+      })
 
       // Phase 2: Research Companies
       const unresearchedCompanies = companies.filter(
@@ -352,7 +379,7 @@ export function useDailyRefresh({
         await delay(500)
       }
 
-      // Mark refresh complete — persist to settings DB
+      // Mark refresh complete
       const currentSettings = await getSettings()
       await saveSettings({ ...currentSettings, lastDailyRefresh: today })
       setLastRefreshDate(today)
