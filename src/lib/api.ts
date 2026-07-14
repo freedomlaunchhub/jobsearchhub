@@ -62,3 +62,18 @@ export function researchContact(params: ResearchContactParams) {
 export function generateMessage(params: GenerateMessageParams) {
   return apiCall<{ message: string }>('generate-message', params)
 }
+
+interface FindContactsParams {
+  companyName: string
+  industry: string
+  targetRoles: string[]
+  brightDataApiKey: string
+  anthropicApiKey: string
+}
+
+export function findContacts(params: FindContactsParams) {
+  return apiCall<{ contacts: Array<{ name: string; title: string; linkedinUrl: string }> }>(
+    'find-contacts',
+    params
+  )
+}

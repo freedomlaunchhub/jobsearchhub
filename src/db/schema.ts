@@ -12,6 +12,7 @@ export interface Settings {
   }
   brightDataApiKey: string
   anthropicApiKey: string
+  lastDailyRefresh?: string
 }
 
 export interface JobSource {
