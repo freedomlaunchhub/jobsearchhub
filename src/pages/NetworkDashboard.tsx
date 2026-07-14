@@ -132,7 +132,7 @@ export default function NetworkDashboard() {
 
   const handleDiscover = async () => {
     const result = await discoverCompanies({
-      industry: settings?.preferredIndustries[0] || undefined,
+      industries: settings?.preferredIndustries.length ? settings.preferredIndustries : undefined,
       country: settings?.discoveryCountry || undefined,
       region: settings?.discoveryLocation || undefined,
       companySizes: settings?.preferredCompanySizes.length ? settings.preferredCompanySizes : undefined,

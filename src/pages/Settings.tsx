@@ -38,7 +38,7 @@ export default function Settings() {
     setDiscoverError(false)
     try {
       const result = await discoverCompanies({
-        industry: settings.preferredIndustries[0] || undefined,
+        industries: settings.preferredIndustries.length > 0 ? settings.preferredIndustries : undefined,
         country: settings.discoveryCountry || undefined,
         region: settings.discoveryLocation || undefined,
         companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,

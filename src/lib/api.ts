@@ -102,7 +102,7 @@ export function findContacts(params: FindContactsParams) {
 }
 
 export interface DiscoverCompaniesParams {
-  industry?: string
+  industries?: string[]
   country?: string
   region?: string
   companySizes?: string[]

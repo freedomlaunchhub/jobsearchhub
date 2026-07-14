@@ -18,7 +18,7 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
-    const { industry, country, region, companySizes, limit = 20 } = body;
+    const { industries, country, region, companySizes, limit = 50 } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -26,13 +26,18 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'BRIGHT_DATA_API_KEY not configured' }, 500);
     }
 
-    if (!industry && !country) {
-      return jsonResponse({ error: 'Industry or country is required' }, 400);
+    if ((!industries || industries.length === 0) && !country) {
+      return jsonResponse({ error: 'At least one industry or a country is required' }, 400);
     }
 
     const filters = [];
-    if (industry) {
-      filters.push({ name: 'industries', operator: 'includes', value: industry });
+    if (Array.isArray(industries) && industries.length === 1) {
+      filters.push({ name: 'industries', operator: 'includes', value: industries[0] });
+    } else if (Array.isArray(industries) && industries.length > 1) {
+      filters.push({
+        operator: 'or',
+        filters: industries.map((ind) => ({ name: 'industries', operator: 'includes', value: ind })),
+      });
     }
     if (country) {
       filters.push({ name: 'country_code', operator: '=', value: country });
