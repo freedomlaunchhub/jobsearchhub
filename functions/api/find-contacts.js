@@ -21,6 +21,8 @@ const ROLE_GROUPS = [
   { score: 2, keywords: ['recruiter', 'talent acquisition', 'talent partner'] },            // recruiters
 ];
 
+export const ROLE_KEYWORDS = ROLE_GROUPS.flatMap((g) => g.keywords);
+
 export function scoreContactRole(position, peerTitles) {
   const p = position.toLowerCase();
   for (const group of ROLE_GROUPS) {
@@ -64,11 +66,15 @@ export async function onRequestPost(context) {
       }
     }
 
+    // Role keywords go INTO the query (array 'includes' = match any), so the
+    // search scans everyone at the company for matching titles instead of
+    // filtering an arbitrary 25-person sample afterwards.
     const searchBody = {
       filter: {
         operator: 'and',
         filters: [
           { name: 'current_company_name', value: companyName, operator: 'includes' },
+          { name: 'position', operator: 'includes', value: [...ROLE_KEYWORDS, ...userJobTitles.filter(Boolean)] },
         ],
       },
       size: 25,
@@ -111,15 +117,14 @@ export async function onRequestPost(context) {
       items = exactMatches;
     }
 
-    // Keep ONLY people matching the role criteria (hiring managers, relevant
-    // professionals, recruiters, or peers in the user's target roles) —
-    // everyone else is discarded, not just ranked lower.
-    const scored = items
-      .map((person) => ({
-        person,
-        score: scoreContactRole(person.position || person.title || '', userJobTitles),
-      }))
-      .filter(({ score }) => score > 0);
+    // The query already restricted results to the role criteria; the local
+    // score just orders them (hiring managers first, peers last). No local
+    // discard — the search's token matching can be broader than a plain
+    // substring check, and those matches are still criteria hits.
+    const scored = items.map((person) => ({
+      person,
+      score: scoreContactRole(person.position || person.title || '', userJobTitles),
+    }));
     scored.sort((a, b) => b.score - a.score);
 
     const seen = new Set();

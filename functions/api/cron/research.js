@@ -1,4 +1,4 @@
-import { scoreContactRole } from '../find-contacts.js';
+import { scoreContactRole, ROLE_KEYWORDS } from '../find-contacts.js';
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
@@ -95,9 +95,17 @@ export async function onRequestPost(context) {
 
         // Find contacts: exact company-name matches preferred over loose
         // substring hits (freelancers/agencies)
+        // Role keywords go into the query so the search scans everyone at
+        // the company for matching titles, not an arbitrary sample
         const peopleHits = await searchDataset(
           PEOPLE_DATASET_ID,
-          { name: 'current_company_name', operator: 'includes', value: company.name },
+          {
+            operator: 'and',
+            filters: [
+              { name: 'current_company_name', operator: 'includes', value: company.name },
+              { name: 'position', operator: 'includes', value: [...ROLE_KEYWORDS, ...userJobTitles.filter(Boolean)] },
+            ],
+          },
           25,
           brightDataApiKey
         );
@@ -107,11 +115,10 @@ export async function onRequestPost(context) {
           const exactPeople = peopleHits.filter(
             (p) => (p.current_company_name || p.current_company?.name || '').trim().toLowerCase() === companyLower
           );
-          // Keep only people matching the role criteria (hiring managers,
-          // relevant professionals, recruiters, or the user's peer roles)
+          // Query already restricted to role criteria; the score just orders
+          // (hiring managers first, peers last)
           const people = (exactPeople.length > 0 ? exactPeople : peopleHits)
             .map((p) => ({ p, score: scoreContactRole(p.position || p.title || '', userJobTitles) }))
-            .filter(({ score }) => score > 0)
             .sort((a, b) => b.score - a.score)
             .map(({ p }) => p);
 
