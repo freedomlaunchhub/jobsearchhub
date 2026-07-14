@@ -185,6 +185,13 @@ export function useDailyRefresh({
 
       if (uniqueNewJobs.length > 0) {
         await addJobs(uniqueNewJobs)
+
+        const existingCompanyNames = new Set(companies.map((c) => c.name.toLowerCase()))
+        const newCompanyNames = [...new Set(uniqueNewJobs.map((j) => j.company))]
+          .filter((name) => !existingCompanyNames.has(name.toLowerCase()))
+        for (const name of newCompanyNames) {
+          await addCompany({ name, status: 'open_listing' })
+        }
       }
 
       setProgress({

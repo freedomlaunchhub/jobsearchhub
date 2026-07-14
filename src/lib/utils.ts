@@ -31,6 +31,7 @@ export const JOB_STATUS_COLORS: Record<string, string> = {
 }
 
 export const COMPANY_STATUS_COLORS: Record<string, string> = {
+  open_listing: 'bg-slate-400',
   researching: 'bg-indigo-400',
   networking: 'bg-teal-500',
   applied: 'bg-teal-600',

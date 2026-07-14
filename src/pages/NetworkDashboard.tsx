@@ -11,15 +11,8 @@ import { researchCompany, findContacts, generateMessage } from '@/lib/api'
 import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
-interface BulkProgress {
-  current: number
-  total: number
-  companyName: string
-}
-
 export default function NetworkDashboard() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
-  const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null)
   const { settings } = useSettings()
   const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts, refresh: refreshCompanies } = useCompanies()
   const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone, refresh: refreshContacts } = useContacts()
@@ -31,6 +24,7 @@ export default function NetworkDashboard() {
   const handleAddCompany = async (partial: Partial<Company>) => {
     const company = await addCompany(partial)
     setSelectedCompanyId(company.id)
+    researchAndFindForCompany(company)
   }
 
   const handleDeleteCompany = async () => {
@@ -108,23 +102,6 @@ export default function NetworkDashboard() {
     return researchAndFindForCompany(selectedCompany)
   }
 
-  const handleResearchAll = useCallback(async () => {
-    if (bulkProgress) return
-    const unresearched = companies.filter(
-      (c) => !c.notes || c.notes.trim() === '' || c.contactCount === 0
-    )
-    if (unresearched.length === 0) return
-    const total = unresearched.length
-    for (let i = 0; i < unresearched.length; i++) {
-      const company = unresearched[i]
-      setBulkProgress({ current: i + 1, total, companyName: company.name })
-      await researchAndFindForCompany(company)
-    }
-    setBulkProgress(null)
-    await refreshCompanies()
-    await refreshContacts()
-  }, [companies, bulkProgress, researchAndFindForCompany, refreshCompanies, refreshContacts])
-
   const handleGenerateMessage = async (contactId: string) => {
     if (!settings) return
     const contact = selectedContacts.find((c) => c.id === contactId)
@@ -150,7 +127,8 @@ export default function NetworkDashboard() {
   const handleImportCompanies = async (csvText: string) => {
     const parsed = parseCompaniesCSV(csvText)
     for (const partial of parsed) {
-      await addCompany(partial)
+      const company = await addCompany(partial)
+      researchAndFindForCompany(company)
     }
   }
 
@@ -177,8 +155,6 @@ export default function NetworkDashboard() {
             onSelect={setSelectedCompanyId}
             onAdd={handleAddCompany}
             onImport={handleImportCompanies}
-            onResearchAll={handleResearchAll}
-            bulkProgress={bulkProgress}
           />
         </div>
 

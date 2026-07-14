@@ -4,6 +4,7 @@ interface Dream100ProgressProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
+  open_listing: 'bg-slate-400',
   researching: 'bg-indigo-400',
   networking: 'bg-teal-500',
   applied: 'bg-teal-600',
@@ -37,7 +38,7 @@ export default function Dream100Progress({ total, statusCounts }: Dream100Progre
         {Object.entries(STATUS_COLORS).map(([status, color]) => (
           <div key={status} className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />
-            <span className="capitalize">{status}</span>
+            <span className="capitalize">{status.replace(/_/g, ' ')}</span>
             <span className="font-medium text-slate-700">{statusCounts[status] ?? 0}</span>
           </div>
         ))}

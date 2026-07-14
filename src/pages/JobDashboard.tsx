@@ -3,6 +3,7 @@ import { useJobs } from '@/hooks/useJobs'
 import { useSettings } from '@/hooks/useSettings'
 import { useStreak } from '@/hooks/useStreak'
 import { useDailyLog } from '@/hooks/useDailyLog'
+import { useCompanies } from '@/hooks/useCompanies'
 import StatsBar from '@/components/jobs/StatsBar'
 import JobFeed from '@/components/jobs/JobFeed'
 import PipelineBoard from '@/components/jobs/PipelineBoard'
@@ -16,6 +17,7 @@ export default function JobDashboard() {
   const { streak, recordActivity } = useStreak({ settings, updateSettings })
   const { todayLog, incrementField } = useDailyLog()
   const { jobs, loading, addJobs, moveJobStatus, pipelineCounts } = useJobs()
+  const { companies, addCompany } = useCompanies()
 
   const handleStatusChange = async (id: string, status: JobStatus) => {
     await moveJobStatus(id, status)
@@ -74,9 +76,16 @@ export default function JobDashboard() {
           createdAt: new Date().toISOString(),
         }
       })
-      await addJobs(newJobs.filter((j) => j.title && j.company))
+      const validJobs = newJobs.filter((j) => j.title && j.company)
+      await addJobs(validJobs)
+
+      const existingNames = new Set(companies.map((c) => c.name.toLowerCase()))
+      const newCompanyNames = [...new Set(validJobs.map((j) => j.company))]
+        .filter((name) => !existingNames.has(name.toLowerCase()))
+      for (const name of newCompanyNames) {
+        await addCompany({ name, status: 'open_listing' })
+      }
     } catch {
-      // API not available yet — will be wired in Phase 4
     } finally {
       setSearching(false)
     }
