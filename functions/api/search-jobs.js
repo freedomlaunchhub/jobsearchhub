@@ -43,7 +43,7 @@ export async function onRequestPost(context) {
         keyword: title,
         location: location,
         country: country || 'CA',
-        time_range: 'Past week',
+        time_range: 'Past 24 hours',
         selective_search: true,
       };
       if (includeRemote) {
@@ -53,7 +53,7 @@ export async function onRequestPost(context) {
     });
 
     // Trigger the dataset collection
-    const triggerUrl = 'https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lpfll7v5hcqtkxl6l&format=json&type=discover_new';
+    const triggerUrl = 'https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lpfll7v5hcqtkxl6l&format=json&type=discover_new&discover_by=keyword';
     const triggerResponse = await fetch(triggerUrl, {
       method: 'POST',
       headers: {

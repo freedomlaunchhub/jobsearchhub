@@ -18,7 +18,7 @@ export async function onRequestGet(context) {
   // Test: Trigger LinkedIn Jobs dataset via Bright Data
   if (env.BRIGHT_DATA_API_KEY) {
     try {
-      const triggerUrl = 'https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lpfll7v5hcqtkxl6l&format=json&type=discover_new&limit_per_input=3';
+      const triggerUrl = 'https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lpfll7v5hcqtkxl6l&format=json&type=discover_new&discover_by=keyword&limit_per_input=3';
       const inputs = [
         {
           keyword: 'Project Manager',
