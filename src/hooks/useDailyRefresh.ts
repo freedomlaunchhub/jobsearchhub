@@ -201,10 +201,14 @@ export function useDailyRefresh({
         total: 1,
       })
 
-      // Phase 2: Research Companies (only 'new' status companies)
-      const unresearchedCompanies = companies.filter(
-        (c) => c.status === 'new'
-      )
+      // Phase 2: Research Companies — only ones deliberately queued by the
+      // user (status 'queued'), capped per run. Bulk-imported companies sit
+      // in 'new' until queued, so a large import can't trigger a runaway
+      // (and costly) research sweep.
+      const RESEARCH_CAP = 25
+      const unresearchedCompanies = companies
+        .filter((c) => c.status === 'queued')
+        .slice(0, RESEARCH_CAP)
       const totalCompanies = unresearchedCompanies.length
 
       setProgress({
@@ -243,8 +247,11 @@ export function useDailyRefresh({
         await delay(500)
       }
 
-      // Phase 3: Find Contacts
-      const companiesWithNoContacts = companies.filter((c) => c.contactCount === 0)
+      // Phase 3: Find Contacts — same deliberate scope as research: only
+      // queued/researched companies without contacts, capped per run
+      const companiesWithNoContacts = companies
+        .filter((c) => (c.status === 'queued' || c.status === 'researched') && c.contactCount === 0)
+        .slice(0, RESEARCH_CAP)
       const totalFindContacts = companiesWithNoContacts.length
 
       setProgress({

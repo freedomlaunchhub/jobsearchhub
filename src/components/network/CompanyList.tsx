@@ -29,10 +29,12 @@ const PRIORITY_ORDER: Record<string, number> = {
 const STATUS_LABELS: Record<CompanyStatus, string> = {
   open_listing: 'Open listing',
   new: 'New',
+  queued: 'Queued for research',
   researched: 'Researched',
   networking: 'Networking',
   applied: 'Applied',
   interviewing: 'Interviewing',
+  not_interested: 'Not interested',
 };
 
 // Largest-first ordering for the size sort; matches dataset bucket strings
@@ -95,7 +97,9 @@ export default function CompanyList({
 
   const filtered = useMemo(() => companies
     .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
-    .filter((c) => statusFilter === 'all' || c.status === statusFilter)
+    // 'Not interested' companies are hidden unless explicitly filtered for —
+    // they stay in the database so Discover never re-imports them
+    .filter((c) => statusFilter === 'all' ? c.status !== 'not_interested' : c.status === statusFilter)
     .filter((c) => industryFilter === 'all' || c.industry === industryFilter)
     .filter((c) => sizeFilter === 'all' || String(c.size).startsWith(sizeFilter))
     .sort((a, b) => {

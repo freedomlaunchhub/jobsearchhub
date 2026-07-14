@@ -19,7 +19,7 @@ interface CompanyDetailProps {
   onGenerateMessage: (contactId: string) => void;
 }
 
-const COMPANY_STATUSES: CompanyStatus[] = ['open_listing', 'new', 'researched', 'networking', 'applied', 'interviewing'];
+const COMPANY_STATUSES: CompanyStatus[] = ['open_listing', 'new', 'queued', 'researched', 'networking', 'applied', 'interviewing', 'not_interested'];
 const PRIORITIES: CompanyPriority[] = ['high', 'medium', 'low'];
 
 export default function CompanyDetail({
@@ -141,7 +141,7 @@ export default function CompanyDetail({
           >
             {COMPANY_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+                {s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
               </option>
             ))}
           </select>
@@ -274,6 +274,34 @@ export default function CompanyDetail({
             <Users className="w-4 h-4" />
             {researching ? 'Researching...' : 'Research & Find People'}
           </button>
+          {(company.status === 'new' || company.status === 'open_listing') && (
+            <button
+              type="button"
+              onClick={() => onUpdateCompany({ status: 'queued' })}
+              className="inline-flex items-center gap-1.5 rounded-md border border-purple-300 px-3 py-2 text-sm font-medium text-purple-600 hover:bg-purple-50"
+              title="Add to the daily auto-research queue"
+            >
+              Queue for Research
+            </button>
+          )}
+          {company.status !== 'not_interested' ? (
+            <button
+              type="button"
+              onClick={() => onUpdateCompany({ status: 'not_interested' })}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              title="Hide from your list — it won't be re-imported by Discover"
+            >
+              Not Interested
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onUpdateCompany({ status: 'new' })}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+            >
+              Restore to List
+            </button>
+          )}
           {!confirmDelete ? (
             <button
               type="button"

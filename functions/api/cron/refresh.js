@@ -160,9 +160,10 @@ export async function onRequestPost(context) {
         }
       }
 
-      // Phase 2: Research companies with 'new' status
+      // Phase 2: Research companies the user queued (status 'queued'), capped
+      // per run so a bulk import can't trigger a runaway research sweep
       const { results: newCompanies } = await env.DB.prepare(
-        "SELECT * FROM companies WHERE user_id = ? AND status = 'new'"
+        "SELECT * FROM companies WHERE user_id = ? AND status = 'queued' ORDER BY created_at LIMIT 25"
       ).bind(userId).all();
 
       let researchedCount = 0;

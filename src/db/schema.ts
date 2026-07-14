@@ -112,7 +112,7 @@ export interface Job {
 
 export type CompanySize = 'Small' | 'Medium' | 'Large' | 'Enterprise'
 export type CompanyPriority = 'high' | 'medium' | 'low'
-export type CompanyStatus = 'open_listing' | 'new' | 'researched' | 'networking' | 'applied' | 'interviewing'
+export type CompanyStatus = 'open_listing' | 'new' | 'queued' | 'researched' | 'networking' | 'applied' | 'interviewing' | 'not_interested'
 
 export interface Company {
   id: string

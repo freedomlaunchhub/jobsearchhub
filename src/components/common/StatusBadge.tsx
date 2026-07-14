@@ -15,10 +15,12 @@ const jobColors: Record<string, string> = {
 const companyColors: Record<string, string> = {
   open_listing: 'bg-slate-400',
   new: 'bg-blue-400',
+  queued: 'bg-purple-400',
   researched: 'bg-indigo-400',
   networking: 'bg-teal-500',
   applied: 'bg-teal-600',
   interviewing: 'bg-amber-500',
+  not_interested: 'bg-slate-300',
 };
 
 const contactColors: Record<string, string> = {

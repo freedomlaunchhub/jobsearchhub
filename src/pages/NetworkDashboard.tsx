@@ -70,6 +70,9 @@ export default function NetworkDashboard() {
             ? company.notes + '\n\n' + result.summary
             : result.summary
         }
+        if (company.status === 'new' || company.status === 'queued') {
+          updates.status = 'researched'
+        }
         if (Object.keys(updates).length > 0) {
           await updateCompany(company.id, updates)
         }
@@ -154,7 +157,7 @@ export default function NetworkDashboard() {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Dream100Progress total={companies.length} statusCounts={statusCounts} />
+        <Dream100Progress total={companies.filter((c) => c.status !== 'not_interested').length} statusCounts={statusCounts} />
         <FollowUpQueue
           contacts={overdueFollowups}
           onMarkDone={handleFollowupDone}
