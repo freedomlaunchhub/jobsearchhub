@@ -13,6 +13,13 @@ function jsonResponse(data, status = 200) {
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 
+// One discovery imports the entire matching pool in a single request,
+// paging through the API internally. PAGE_SIZE keeps per-page memory small
+// (records carry heavy fields like post history); MAX_TOTAL bounds cost —
+// Bright Data charges ~$2.50 per 1,000 records returned.
+const PAGE_SIZE = 250;
+const MAX_TOTAL = 3000;
+
 // Canonical LinkedIn size buckets as stored in the Bright Data dataset
 // (values appear as e.g. "1,001-5,000 employees" — 'includes' matches the prefix).
 // Keyed by the comma-less form so legacy saved values like "1001-5000" still resolve.
@@ -50,7 +57,7 @@ export async function onRequestPost(context) {
   try {
     const { request, env, data } = context;
     const body = await request.json();
-    const { industries, country, region, companySizes, limit = 50 } = body;
+    const { industries, country, region, companySizes, limit } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -91,90 +98,8 @@ export async function onRequestPost(context) {
       }
     }
 
-    const searchBody = {
-      size: Math.min(limit, 50),
-      sort: 'default',
-      filter: filters.length === 1 ? filters[0] : { operator: 'and', filters },
-    };
-
-    // Repeat discoveries page through the result pool instead of re-fetching
-    // the same first page: the search_after cursor from the previous response
-    // is stored in KV, keyed per user and per filter combination.
-    let cursorKey = null;
-    if (userId) {
-      const fingerprint = JSON.stringify(searchBody.filter);
-      let h = 5381;
-      for (let i = 0; i < fingerprint.length; i++) {
-        h = ((h * 33) ^ fingerprint.charCodeAt(i)) >>> 0;
-      }
-      cursorKey = `discover_cursor:${userId}:${h.toString(36)}`;
-      const cursor = await env.KV.get(cursorKey, 'json');
-      if (cursor) searchBody.search_after = cursor;
-    }
-
-    const callBrightData = async () =>
-      fetch(`https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${brightDataApiKey}`,
-        },
-        body: JSON.stringify(searchBody),
-      });
-
-    let response;
-    try {
-      response = await callBrightData();
-      // A stale cursor (dataset refreshed since last page) can invalidate the
-      // request — restart from the first page rather than failing.
-      if (!response.ok && response.status !== 422 && searchBody.search_after) {
-        delete searchBody.search_after;
-        if (cursorKey) await env.KV.delete(cursorKey);
-        response = await callBrightData();
-      }
-    } catch (fetchErr) {
-      return jsonResponse({
-        error: `Network error calling Bright Data: ${fetchErr.message}`,
-        requestSent: searchBody,
-      }, 502);
-    }
-
-    // 422 means the filter matched zero records — that's a valid empty result.
-    // With a cursor set it means we've paged past the end: clear it so the
-    // next discovery starts over from the first page.
-    if (response.status === 422) {
-      if (cursorKey) await env.KV.delete(cursorKey);
-      return jsonResponse({ companies: [], savedCount: 0, total: 0, alreadyExisted: 0, hasMore: false });
-    }
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      return jsonResponse({
-        error: `Bright Data returned ${response.status}`,
-        detail: text.slice(0, 500),
-        requestSent: searchBody,
-      }, 502);
-    }
-
-    let results;
-    try {
-      results = await response.json();
-    } catch (parseErr) {
-      return jsonResponse({
-        error: `Failed to parse Bright Data response: ${parseErr.message}`,
-        requestSent: searchBody,
-      }, 502);
-    }
-
-    const items = results.hits || [];
-
-    if (cursorKey) {
-      if (results.search_after && items.length > 0) {
-        await env.KV.put(cursorKey, JSON.stringify(results.search_after), { expirationTtl: 7 * 24 * 3600 });
-      } else {
-        await env.KV.delete(cursorKey);
-      }
-    }
+    const filter = filters.length === 1 ? filters[0] : { operator: 'and', filters };
+    const maxTotal = Math.min(limit || MAX_TOTAL, MAX_TOTAL);
 
     let existingNames = new Set();
     if (userId) {
@@ -188,39 +113,110 @@ export async function onRequestPost(context) {
       }
     }
 
-    const companies = items
-      .filter((c) => c.name)
-      .map((c) => ({
-        name: c.name,
-        website: c.website || null,
-        linkedinUrl: c.url || c.linkedin_url || null,
-        industry: Array.isArray(c.industries) ? c.industries.join(', ') : (c.industries || c.industry || null),
-        size: c.company_size || c.size || null,
-        headquarters: c.headquarters || null,
-        about: c.about || c.description || null,
-        alreadyExists: existingNames.has(c.name.toLowerCase()),
-      }));
+    const companies = [];
+    const seenNames = new Set();
+    let totalMatching = null;
+    let searchAfter = null;
+
+    while (companies.length < maxTotal) {
+      const searchBody = {
+        size: Math.min(PAGE_SIZE, maxTotal - companies.length),
+        sort: 'default',
+        filter,
+      };
+      if (searchAfter) searchBody.search_after = searchAfter;
+
+      let response;
+      try {
+        response = await fetch(
+          `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${brightDataApiKey}`,
+            },
+            body: JSON.stringify(searchBody),
+          }
+        );
+      } catch (fetchErr) {
+        return jsonResponse({
+          error: `Network error calling Bright Data: ${fetchErr.message}`,
+          requestSent: searchBody,
+        }, 502);
+      }
+
+      // 422 means the filter matched zero records — a valid empty result
+      if (response.status === 422) break;
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        return jsonResponse({
+          error: `Bright Data returned ${response.status}`,
+          detail: text.slice(0, 500),
+          requestSent: searchBody,
+        }, 502);
+      }
+
+      let results;
+      try {
+        results = await response.json();
+      } catch (parseErr) {
+        return jsonResponse({
+          error: `Failed to parse Bright Data response: ${parseErr.message}`,
+        }, 502);
+      }
+
+      const items = results.hits || [];
+      if (totalMatching === null) totalMatching = results.total_hits ?? null;
+
+      for (const c of items) {
+        if (!c.name) continue;
+        const nameLower = c.name.toLowerCase();
+        if (seenNames.has(nameLower)) continue;
+        seenNames.add(nameLower);
+        companies.push({
+          name: c.name,
+          website: c.website || null,
+          linkedinUrl: c.url || c.linkedin_url || null,
+          industry: Array.isArray(c.industries) ? c.industries.join(', ') : (c.industries || c.industry || null),
+          size: c.company_size || c.size || null,
+          headquarters: c.headquarters || null,
+          alreadyExists: existingNames.has(nameLower),
+        });
+      }
+
+      searchAfter = results.search_after;
+      if (!searchAfter || items.length === 0) break;
+    }
 
     let savedCount = 0;
     if (userId) {
-      for (const company of companies) {
-        if (company.alreadyExists) continue;
+      const toInsert = companies.filter((c) => !c.alreadyExists);
+      const now = new Date().toISOString();
+      const stmt = env.DB.prepare(
+        `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
+         VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', '', 0, ?)`
+      );
+      // Chunked batches: one D1 call per 50 rows instead of one per row
+      for (let i = 0; i < toInsert.length; i += 50) {
+        const chunk = toInsert.slice(i, i + 50);
         try {
-          const id = crypto.randomUUID();
-          await env.DB.prepare(
-            `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
-             VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', '', 0, ?)`
-          ).bind(
-            id, userId, company.name,
-            company.industry || '',
-            company.website || '',
-            company.linkedinUrl || '',
-            company.size || '',
-            new Date().toISOString()
-          ).run();
-          savedCount++;
+          await env.DB.batch(
+            chunk.map((company) =>
+              stmt.bind(
+                crypto.randomUUID(), userId, company.name,
+                company.industry || '',
+                company.website || '',
+                company.linkedinUrl || '',
+                company.size || '',
+                now
+              )
+            )
+          );
+          savedCount += chunk.length;
         } catch (insertErr) {
-          console.error(`Insert error for ${company.name}:`, insertErr);
+          console.error(`Batch insert error (rows ${i}-${i + chunk.length}):`, insertErr);
         }
       }
     }
@@ -230,8 +226,7 @@ export async function onRequestPost(context) {
       savedCount,
       total: companies.length,
       alreadyExisted: companies.filter((c) => c.alreadyExists).length,
-      totalMatching: results.total_hits ?? null,
-      hasMore: Boolean(results.search_after && items.length > 0),
+      totalMatching,
     });
   } catch (err) {
     return jsonResponse({ error: err.message || 'Internal server error', stack: String(err.stack || '').slice(0, 500) }, 500);

@@ -117,12 +117,12 @@ export interface DiscoverCompaniesResult {
     industry: string | null
     size: string | null
     headquarters: string | null
-    about: string | null
     alreadyExists: boolean
   }>
   savedCount: number
   total: number
   alreadyExisted: number
+  totalMatching: number | null
 }
 
 export function discoverCompanies(params: DiscoverCompaniesParams) {
