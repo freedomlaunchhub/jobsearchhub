@@ -23,31 +23,43 @@ export async function onRequestPost(context) {
     const userId = data.user?.userId;
 
     if (!brightDataApiKey) {
-      return jsonResponse({ error: 'Bright Data API key not configured on server' }, 500);
+      return jsonResponse({ error: 'BRIGHT_DATA_API_KEY not configured' }, 500);
     }
 
     if (!industry && !location && !companySize) {
-      return jsonResponse({ error: 'At least one filter (industry, location, or companySize) is required' }, 400);
+      return jsonResponse({ error: 'At least one filter is required' }, 400);
     }
 
-    const filters = [];
-    if (industry) {
-      filters.push({ name: 'industries', value: industry, operator: 'contains' });
-    }
-    if (location) {
-      filters.push({ name: 'headquarters', value: location, operator: 'contains' });
-    }
-    if (companySize) {
-      filters.push({ name: 'company_size', value: companySize, operator: 'contains' });
-    }
-
+    // Build filter using only 'name' field (confirmed working) with industry as keyword
+    // The 'industries', 'headquarters', 'company_size' fields may not support 'contains'
+    const keyword = industry || location || '';
     const searchBody = {
       filter: {
         operator: 'and',
-        filters,
+        filters: [
+          { name: 'name', value: keyword, operator: 'contains' },
+        ],
       },
       limit: Math.min(limit, 50),
     };
+
+    // If we have industry, search by industry field using the same pattern as research
+    if (industry) {
+      searchBody.filter.filters = [
+        { name: 'industries', value: industry, operator: 'contains' },
+      ];
+    }
+
+    // Add location filter if provided
+    if (location && industry) {
+      searchBody.filter.filters.push(
+        { name: 'headquarters', value: location, operator: 'contains' }
+      );
+    } else if (location && !industry) {
+      searchBody.filter.filters = [
+        { name: 'headquarters', value: location, operator: 'contains' },
+      ];
+    }
 
     const response = await fetch(
       `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
@@ -63,12 +75,14 @@ export async function onRequestPost(context) {
 
     if (!response.ok) {
       const text = await response.text();
-      console.error('Bright Data error:', response.status, text, 'Request body:', JSON.stringify(searchBody));
-      return jsonResponse({ error: `Bright Data error (${response.status}): ${text}`, debug: { searchBody } }, 502);
+      return jsonResponse({
+        error: `Bright Data API returned ${response.status}: ${text.slice(0, 300)}`,
+        requestSent: searchBody,
+      }, 502);
     }
 
     const results = await response.json();
-    const items = Array.isArray(results) ? results : (results.results || []);
+    const items = Array.isArray(results) ? results : (results.results || results.hits || []);
 
     // Get existing company names for this user to mark duplicates
     let existingNames = new Set();
@@ -79,7 +93,15 @@ export async function onRequestPost(context) {
       existingNames = new Set(existing.map((r) => r.name));
     }
 
-    const companies = items
+    // Post-filter by company size in code (more reliable than API filter)
+    const sizeFiltered = companySize
+      ? items.filter((c) => {
+          const size = c.company_size || '';
+          return size.toLowerCase().includes(companySize.toLowerCase());
+        })
+      : items;
+
+    const companies = sizeFiltered
       .filter((c) => c.name)
       .map((c) => ({
         name: c.name,

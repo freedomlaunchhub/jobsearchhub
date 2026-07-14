@@ -34,8 +34,15 @@ async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    const errBody = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(errBody.error || errBody.message || `API error: ${response.status}`)
+    const text = await response.text().catch(() => '')
+    let errMsg = `API error ${response.status}`
+    try {
+      const errBody = JSON.parse(text)
+      errMsg = errBody.error || errBody.message || errMsg
+    } catch {
+      errMsg = text ? `${errMsg}: ${text.slice(0, 200)}` : errMsg
+    }
+    throw new Error(errMsg)
   }
   return response.json()
 }
