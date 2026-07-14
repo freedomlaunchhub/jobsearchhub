@@ -32,13 +32,13 @@ export async function onRequestPost(context) {
 
     const filters = [];
     if (industry) {
-      filters.push({ name: 'industries', value: industry, operator: 'contains' });
+      filters.push({ name: 'industries', value: industry, operator: 'includes' });
     }
     if (location) {
-      filters.push({ name: 'headquarters', value: location, operator: 'contains' });
+      filters.push({ name: 'headquarters', value: location, operator: 'includes' });
     }
     if (companySize) {
-      filters.push({ name: 'company_size', value: companySize, operator: 'contains' });
+      filters.push({ name: 'company_size', value: companySize, operator: 'includes' });
     }
 
     const searchBody = {

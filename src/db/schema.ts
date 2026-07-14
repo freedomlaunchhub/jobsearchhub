@@ -12,6 +12,7 @@ export interface Settings {
   }
   preferredIndustries: string[]
   preferredCompanySizes: string[]
+  discoveryLocation: string
   lastDailyRefresh?: string
 }
 
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dailyTarget: 5,
   preferredIndustries: [],
   preferredCompanySizes: [],
+  discoveryLocation: '',
   streak: {
     current: 0,
     longest: 0,

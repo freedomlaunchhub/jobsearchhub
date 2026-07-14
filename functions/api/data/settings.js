@@ -32,8 +32,8 @@ export async function onRequestPut(context) {
     const body = await request.json();
 
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO settings (user_id, job_titles, location, remote_included, job_sources, daily_target, streak_current, streak_longest, last_active_date, bright_data_api_key, anthropic_api_key, preferred_industries, preferred_company_sizes, last_daily_refresh)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?)`
+      `INSERT OR REPLACE INTO settings (user_id, job_titles, location, remote_included, job_sources, daily_target, streak_current, streak_longest, last_active_date, bright_data_api_key, anthropic_api_key, preferred_industries, preferred_company_sizes, discovery_location, last_daily_refresh)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`
     ).bind(
       userId,
       JSON.stringify(body.jobTitles || []),
@@ -46,6 +46,7 @@ export async function onRequestPut(context) {
       body.streak?.lastActiveDate || '',
       JSON.stringify(body.preferredIndustries || []),
       JSON.stringify(body.preferredCompanySizes || []),
+      body.discoveryLocation || '',
       body.lastDailyRefresh || ''
     ).run();
 

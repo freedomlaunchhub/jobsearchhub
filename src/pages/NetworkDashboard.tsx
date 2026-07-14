@@ -133,7 +133,7 @@ export default function NetworkDashboard() {
   const handleDiscover = async () => {
     const result = await discoverCompanies({
       industry: settings?.preferredIndustries[0] || undefined,
-      location: settings?.location || undefined,
+      location: settings?.discoveryLocation || undefined,
       companySize: settings?.preferredCompanySizes[0] || undefined,
     })
     if (result.savedCount > 0) {
@@ -144,7 +144,7 @@ export default function NetworkDashboard() {
 
   const canDiscover = (settings?.preferredIndustries.length ?? 0) > 0 ||
     (settings?.preferredCompanySizes.length ?? 0) > 0 ||
-    !!settings?.location
+    !!settings?.discoveryLocation
 
   if (companiesLoading || contactsLoading) {
     return <div className="text-muted">Loading...</div>

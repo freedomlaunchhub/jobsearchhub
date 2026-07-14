@@ -29,7 +29,7 @@ export default function Settings() {
   const handleDiscover = async () => {
     const hasFilters = settings.preferredIndustries.length > 0 ||
       settings.preferredCompanySizes.length > 0 ||
-      settings.location
+      settings.discoveryLocation
     if (!hasFilters) return
 
     setDiscovering(true)
@@ -38,7 +38,7 @@ export default function Settings() {
     try {
       const result = await discoverCompanies({
         industry: settings.preferredIndustries[0] || undefined,
-        location: settings.location || undefined,
+        location: settings.discoveryLocation || undefined,
         companySize: settings.preferredCompanySizes[0] || undefined,
       })
       if (result.savedCount > 0) {
@@ -127,7 +127,7 @@ export default function Settings() {
 
   const canDiscover = settings.preferredIndustries.length > 0 ||
     settings.preferredCompanySizes.length > 0 ||
-    settings.location
+    settings.discoveryLocation
 
   return (
     <div className="max-w-2xl">
@@ -224,6 +224,17 @@ export default function Settings() {
             onChange={(preferredIndustries) => updateSettings({ preferredIndustries })}
             placeholder="Add an industry (e.g., Technology, Energy, Healthcare)..."
           />
+        </Field>
+
+        <Field label="Discovery Location">
+          <input
+            type="text"
+            value={settings.discoveryLocation}
+            onChange={(e) => updateSettings({ discoveryLocation: e.target.value })}
+            placeholder="e.g., Alberta, Canada or Calgary"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          />
+          <p className="text-xs text-muted mt-1">Can differ from job search location — use a broader or narrower area</p>
         </Field>
 
         <Field label="Preferred Company Sizes">
