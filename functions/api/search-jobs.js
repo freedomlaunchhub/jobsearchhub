@@ -60,7 +60,7 @@ export async function onRequestPost(context) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${brightDataApiKey}`,
       },
-      body: JSON.stringify(inputs),
+      body: JSON.stringify({ input: inputs }),
     });
 
     if (!triggerResponse.ok) {

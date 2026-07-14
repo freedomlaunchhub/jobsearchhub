@@ -35,7 +35,7 @@ export async function onRequestGet(context) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${env.BRIGHT_DATA_API_KEY}`,
         },
-        body: JSON.stringify(inputs),
+        body: JSON.stringify({ input: inputs }),
       });
 
       const triggerText = await triggerResponse.text();
