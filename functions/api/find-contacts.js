@@ -23,6 +23,21 @@ const ROLE_GROUPS = [
 
 export const ROLE_KEYWORDS = ROLE_GROUPS.flatMap((g) => g.keywords);
 
+// Each phrase in an array-valued 'includes' makes the search more expensive;
+// past ~a dozen phrases Bright Data starts timing out. Add the user's target
+// titles (peers) only when not already covered, and cap the total.
+export function buildRoleKeywords(userJobTitles) {
+  const keywords = [...ROLE_KEYWORDS];
+  for (const t of userJobTitles || []) {
+    const tl = String(t).toLowerCase().trim();
+    if (!tl) continue;
+    if (keywords.some((k) => tl.includes(k) || k.includes(tl))) continue;
+    keywords.push(tl);
+    if (keywords.length >= 13) break;
+  }
+  return keywords;
+}
+
 export function scoreContactRole(position, peerTitles) {
   const p = position.toLowerCase();
   for (const group of ROLE_GROUPS) {
@@ -69,28 +84,44 @@ export async function onRequestPost(context) {
     // Role keywords go INTO the query (array 'includes' = match any), so the
     // search scans everyone at the company for matching titles instead of
     // filtering an arbitrary 25-person sample afterwards.
-    const searchBody = {
+    const roleFilteredBody = {
       filter: {
         operator: 'and',
         filters: [
           { name: 'current_company_name', value: companyName, operator: 'includes' },
-          { name: 'position', operator: 'includes', value: [...ROLE_KEYWORDS, ...userJobTitles.filter(Boolean)] },
+          { name: 'position', operator: 'includes', value: buildRoleKeywords(userJobTitles) },
         ],
       },
       size: 25,
     };
+    // Fallback when the role-filtered query times out on Bright Data's side:
+    // sample the company without the position filter and filter locally.
+    const companyOnlyBody = {
+      filter: { name: 'current_company_name', value: companyName, operator: 'includes' },
+      size: 25,
+    };
 
-    const response = await fetch(
-      `https://api.brightdata.com/datasets/search/${PEOPLE_DATASET_ID}`,
-      {
+    const search = (body) =>
+      fetch(`https://api.brightdata.com/datasets/search/${PEOPLE_DATASET_ID}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${brightDataApiKey}`,
         },
-        body: JSON.stringify(searchBody),
-      }
-    );
+        body: JSON.stringify(body),
+      });
+
+    let usedFallback = false;
+    let response = await search(roleFilteredBody);
+    if (!response.ok && response.status !== 422) {
+      // The multi-phrase search can be slow; one retry usually hits warm caches
+      await new Promise((r) => setTimeout(r, 2000));
+      response = await search(roleFilteredBody);
+    }
+    if (!response.ok && response.status !== 422) {
+      usedFallback = true;
+      response = await search(companyOnlyBody);
+    }
 
     // 422 means the filter matched zero records — a valid empty result
     if (response.status === 422) {
@@ -117,14 +148,16 @@ export async function onRequestPost(context) {
       items = exactMatches;
     }
 
-    // The query already restricted results to the role criteria; the local
-    // score just orders them (hiring managers first, peers last). No local
-    // discard — the search's token matching can be broader than a plain
-    // substring check, and those matches are still criteria hits.
-    const scored = items.map((person) => ({
+    // The role-filtered query already restricted results to the criteria; the
+    // local score just orders them (hiring managers first, peers last). Only
+    // the unfiltered fallback sample needs a local discard of non-matches.
+    let scored = items.map((person) => ({
       person,
       score: scoreContactRole(person.position || person.title || '', userJobTitles),
     }));
+    if (usedFallback) {
+      scored = scored.filter(({ score }) => score > 0);
+    }
     scored.sort((a, b) => b.score - a.score);
 
     const seen = new Set();

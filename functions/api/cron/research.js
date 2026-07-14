@@ -1,4 +1,4 @@
-import { scoreContactRole, ROLE_KEYWORDS } from '../find-contacts.js';
+import { scoreContactRole, buildRoleKeywords } from '../find-contacts.js';
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
@@ -96,19 +96,31 @@ export async function onRequestPost(context) {
         // Find contacts: exact company-name matches preferred over loose
         // substring hits (freelancers/agencies)
         // Role keywords go into the query so the search scans everyone at
-        // the company for matching titles, not an arbitrary sample
-        const peopleHits = await searchDataset(
-          PEOPLE_DATASET_ID,
-          {
-            operator: 'and',
-            filters: [
-              { name: 'current_company_name', operator: 'includes', value: company.name },
-              { name: 'position', operator: 'includes', value: [...ROLE_KEYWORDS, ...userJobTitles.filter(Boolean)] },
-            ],
-          },
-          25,
-          brightDataApiKey
-        );
+        // the company for matching titles, not an arbitrary sample. The
+        // multi-phrase search can time out — retry once, then fall back to
+        // an unfiltered sample that gets filtered locally.
+        const roleFilter = {
+          operator: 'and',
+          filters: [
+            { name: 'current_company_name', operator: 'includes', value: company.name },
+            { name: 'position', operator: 'includes', value: buildRoleKeywords(userJobTitles) },
+          ],
+        };
+        let usedFallback = false;
+        let peopleHits = await searchDataset(PEOPLE_DATASET_ID, roleFilter, 25, brightDataApiKey);
+        if (peopleHits === null) {
+          await new Promise((r) => setTimeout(r, 2000));
+          peopleHits = await searchDataset(PEOPLE_DATASET_ID, roleFilter, 25, brightDataApiKey);
+        }
+        if (peopleHits === null) {
+          usedFallback = true;
+          peopleHits = await searchDataset(
+            PEOPLE_DATASET_ID,
+            { name: 'current_company_name', operator: 'includes', value: company.name },
+            25,
+            brightDataApiKey
+          );
+        }
 
         if (peopleHits && peopleHits.length > 0) {
           const companyLower = company.name.trim().toLowerCase();
@@ -116,9 +128,11 @@ export async function onRequestPost(context) {
             (p) => (p.current_company_name || p.current_company?.name || '').trim().toLowerCase() === companyLower
           );
           // Query already restricted to role criteria; the score just orders
-          // (hiring managers first, peers last)
+          // (hiring managers first, peers last). Only the unfiltered fallback
+          // sample needs a local discard of non-matches.
           const people = (exactPeople.length > 0 ? exactPeople : peopleHits)
             .map((p) => ({ p, score: scoreContactRole(p.position || p.title || '', userJobTitles) }))
+            .filter(({ score }) => !usedFallback || score > 0)
             .sort((a, b) => b.score - a.score)
             .map(({ p }) => p);
 
