@@ -220,13 +220,14 @@ export default function CompanyList({
       setShowDiscover(false);
       setPreviewCount(null);
       setTimeout(() => setDiscoverResult(null), 8000);
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
       setDiscoverResult(
         saved > 0
-          ? `Pull interrupted after ${saved} new companies — click Pull again to continue`
-          : 'Discovery failed — check your criteria and try again'
+          ? `Pull interrupted after ${saved} new companies — click Pull again to continue. (${msg})`
+          : `Discovery failed: ${msg}`
       );
-      setTimeout(() => setDiscoverResult(null), 10000);
+      setTimeout(() => setDiscoverResult(null), 15000);
     } finally {
       setDiscovering(false);
     }
