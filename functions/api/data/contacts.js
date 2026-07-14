@@ -40,9 +40,9 @@ export async function onRequestPost(context) {
     const s = serializeContact(contact, userId);
 
     await env.DB.prepare(
-      `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, other_social, rapport_notes, connection_status, connection_date, last_contact_date, next_followup_date, message_drafts, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(s.id, s.user_id, s.company_id, s.company_name, s.name, s.title, s.linkedin_url, s.other_social, s.rapport_notes, s.connection_status, s.connection_date, s.last_contact_date, s.next_followup_date, s.message_drafts, s.notes, s.created_at).run();
+      `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, location, other_social, rapport_notes, connection_status, connection_date, last_contact_date, next_followup_date, message_drafts, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(s.id, s.user_id, s.company_id, s.company_name, s.name, s.title, s.linkedin_url, s.location, s.other_social, s.rapport_notes, s.connection_status, s.connection_date, s.last_contact_date, s.next_followup_date, s.message_drafts, s.notes, s.created_at).run();
 
     // Increment company contact count
     if (s.company_id) {
@@ -66,9 +66,9 @@ export async function onRequestPut(context) {
     const s = serializeContact(contact, userId);
 
     await env.DB.prepare(
-      `UPDATE contacts SET company_id=?, company_name=?, name=?, title=?, linkedin_url=?, other_social=?, rapport_notes=?, connection_status=?, connection_date=?, last_contact_date=?, next_followup_date=?, message_drafts=?, notes=?
+      `UPDATE contacts SET company_id=?, company_name=?, name=?, title=?, linkedin_url=?, location=?, other_social=?, rapport_notes=?, connection_status=?, connection_date=?, last_contact_date=?, next_followup_date=?, message_drafts=?, notes=?
        WHERE id=? AND user_id=?`
-    ).bind(s.company_id, s.company_name, s.name, s.title, s.linkedin_url, s.other_social, s.rapport_notes, s.connection_status, s.connection_date, s.last_contact_date, s.next_followup_date, s.message_drafts, s.notes, s.id, userId).run();
+    ).bind(s.company_id, s.company_name, s.name, s.title, s.linkedin_url, s.location, s.other_social, s.rapport_notes, s.connection_status, s.connection_date, s.last_contact_date, s.next_followup_date, s.message_drafts, s.notes, s.id, userId).run();
 
     return jsonResponse({ success: true });
   } catch (err) {

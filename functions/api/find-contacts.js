@@ -13,26 +13,23 @@ function jsonResponse(data, status = 200) {
 
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
 
-const DEFAULT_TARGET_ROLES = [
-  'Director',
-  'VP',
-  'Vice President',
-  'Head of',
-  'Senior Manager',
-  'Manager',
-  'Project Manager',
-  'Program Manager',
-  'Change Manager',
-  'Transformation',
-  'PMO',
-  'Scrum Master',
-  'Agile',
-  'Recruiter',
-  'Talent Acquisition',
-  'People',
-  'HR',
-  'Hiring',
+// Role groups (highest priority first). Only people matching one of these —
+// or the user's own target job titles (peers) — are kept.
+const ROLE_GROUPS = [
+  { score: 4, keywords: ['senior manager', 'director', 'head', 'vp', 'vice president'] },   // hiring managers
+  { score: 3, keywords: ['project manager', 'program manager', 'business analyst'] },       // relevant professionals
+  { score: 2, keywords: ['recruiter', 'talent acquisition', 'talent partner'] },            // recruiters
 ];
+
+export function scoreContactRole(position, peerTitles) {
+  const p = position.toLowerCase();
+  for (const group of ROLE_GROUPS) {
+    if (group.keywords.some((k) => p.includes(k))) return group.score;
+  }
+  // Optional peers: people currently doing the user's target job
+  if (peerTitles.some((t) => t && p.includes(t.toLowerCase()))) return 1;
+  return 0;
+}
 
 export async function onRequestPost(context) {
   const { request, env, data } = context;
@@ -42,7 +39,6 @@ export async function onRequestPost(context) {
     const {
       companyName,
       companyId,
-      targetRoles = DEFAULT_TARGET_ROLES,
       autoSave = true,
     } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
@@ -115,42 +111,15 @@ export async function onRequestPost(context) {
       items = exactMatches;
     }
 
-    const allRoles = [...targetRoles];
-    for (const jt of userJobTitles) {
-      if (!allRoles.some((r) => r.toLowerCase() === jt.toLowerCase())) {
-        allRoles.push(jt);
-      }
-    }
-    const roleLower = allRoles.map((r) => r.toLowerCase());
-
-    // Seniority keywords for scoring — hiring managers and leaders score highest
-    const seniorityKeywords = ['director', 'vp', 'vice president', 'head of', 'chief', 'senior director', 'svp', 'evp'];
-    const recruiterKeywords = ['recruiter', 'talent acquisition', 'hiring', 'people operations', 'hr business partner'];
-
-    const scored = items.map((person) => {
-      const position = (person.position || person.title || '').toLowerCase();
-      let score = 0;
-
-      // Role relevance: matches user's target roles or job titles
-      const roleMatch = roleLower.some((r) => position.includes(r));
-      if (roleMatch) score += 3;
-
-      // Senior/leadership bonus — these are decision-makers
-      if (seniorityKeywords.some((k) => position.includes(k))) score += 2;
-
-      // Recruiter bonus — gatekeepers
-      if (recruiterKeywords.some((k) => position.includes(k))) score += 2;
-
-      // Peer-level bonus — same function, good for referrals
-      for (const jt of userJobTitles) {
-        if (position.includes(jt.toLowerCase())) {
-          score += 1;
-          break;
-        }
-      }
-
-      return { person, score };
-    });
+    // Keep ONLY people matching the role criteria (hiring managers, relevant
+    // professionals, recruiters, or peers in the user's target roles) —
+    // everyone else is discarded, not just ranked lower.
+    const scored = items
+      .map((person) => ({
+        person,
+        score: scoreContactRole(person.position || person.title || '', userJobTitles),
+      }))
+      .filter(({ score }) => score > 0);
     scored.sort((a, b) => b.score - a.score);
 
     const seen = new Set();
@@ -166,8 +135,7 @@ export async function onRequestPost(context) {
         name,
         title: person.position || person.title || '',
         linkedinUrl,
-        city: person.city || '',
-        about: person.about || '',
+        location: person.city || person.location || '',
       });
     }
 
@@ -188,12 +156,12 @@ export async function onRequestPost(context) {
 
         const id = crypto.randomUUID();
         await env.DB.prepare(
-          `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, other_social, rapport_notes, connection_status, connection_date, last_contact_date, next_followup_date, message_drafts, notes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'identified', NULL, NULL, NULL, '[]', '', ?)`
+          `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, location, other_social, rapport_notes, connection_status, connection_date, last_contact_date, next_followup_date, message_drafts, notes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', '', 'identified', NULL, NULL, NULL, '[]', '', ?)`
         ).bind(
           id, userId, companyId, companyName,
           contact.name, contact.title, contact.linkedinUrl,
-          contact.about,
+          contact.location,
           new Date().toISOString()
         ).run();
         savedCount++;

@@ -31,6 +31,7 @@ export function useContacts() {
         name: '',
         title: '',
         linkedinUrl: '',
+        location: '',
         otherSocial: [],
         rapportNotes: '',
         connectionStatus: 'identified',

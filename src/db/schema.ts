@@ -144,6 +144,7 @@ export interface Contact {
   name: string
   title: string
   linkedinUrl: string
+  location: string
   otherSocial: SocialProfile[]
   rapportNotes: string
   connectionStatus: ConnectionStatus

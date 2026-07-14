@@ -7,7 +7,7 @@ import Dream100Progress from '@/components/network/Dream100Progress'
 import FollowUpQueue from '@/components/network/FollowUpQueue'
 import CompanyList from '@/components/network/CompanyList'
 import CompanyDetail from '@/components/network/CompanyDetail'
-import { researchCompany, findContacts, generateMessage, discoverCompanies } from '@/lib/api'
+import { researchCompany, findContacts, discoverCompanies } from '@/lib/api'
 import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
@@ -104,28 +104,6 @@ export default function NetworkDashboard() {
     return researchAndFindForCompany(selectedCompany)
   }
 
-  const handleGenerateMessage = async (contactId: string) => {
-    if (!settings) return
-    const contact = selectedContacts.find((c) => c.id === contactId)
-    if (!contact) return
-    try {
-      const result = await generateMessage({
-        contactName: contact.name,
-        contactTitle: contact.title,
-        company: contact.companyName,
-        rapportNotes: contact.rapportNotes,
-        messageType: 'connection',
-        previousMessages: contact.messageDrafts,
-        additionalContext: '',
-      })
-      await updateContact(contactId, {
-        messageDrafts: [...contact.messageDrafts, result.message],
-      })
-    } catch {
-      // API failed silently
-    }
-  }
-
   const handleImportCompanies = async (csvText: string) => {
     const parsed = parseCompaniesCSV(csvText)
     for (const partial of parsed) {
@@ -192,7 +170,6 @@ export default function NetworkDashboard() {
               onUpdateContact={updateContact}
               onDeleteCompany={handleDeleteCompany}
               onResearchAndFind={handleResearchAndFind}
-              onGenerateMessage={handleGenerateMessage}
             />
           ) : (
             <div className="bg-white rounded-xl shadow-sm p-8 text-center text-muted">

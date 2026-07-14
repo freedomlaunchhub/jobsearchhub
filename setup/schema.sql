@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   name TEXT NOT NULL,
   title TEXT DEFAULT '',
   linkedin_url TEXT DEFAULT '',
+  location TEXT DEFAULT '',
   other_social TEXT DEFAULT '[]',
   rapport_notes TEXT DEFAULT '',
   connection_status TEXT DEFAULT 'identified',

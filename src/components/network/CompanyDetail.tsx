@@ -16,7 +16,6 @@ interface CompanyDetailProps {
   onUpdateContact: (id: string, partial: Partial<Contact>) => void;
   onDeleteCompany: () => void;
   onResearchAndFind: () => Promise<ResearchAndFindResult | undefined>;
-  onGenerateMessage: (contactId: string) => void;
 }
 
 const COMPANY_STATUSES: CompanyStatus[] = ['open_listing', 'new', 'queued', 'researched', 'networking', 'applied', 'interviewing', 'not_interested'];
@@ -30,7 +29,6 @@ export default function CompanyDetail({
   onUpdateContact,
   onDeleteCompany,
   onResearchAndFind,
-  onGenerateMessage,
 }: CompanyDetailProps) {
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactName, setContactName] = useState('');
@@ -172,8 +170,8 @@ export default function CompanyDetail({
               onUpdateCompany({ whyDream: e.target.value });
             }
           }}
-          rows={3}
-          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+          rows={6}
+          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
           placeholder="What makes this a dream company for you?"
         />
       </div>
@@ -188,8 +186,8 @@ export default function CompanyDetail({
               onUpdateCompany({ notes: e.target.value });
             }
           }}
-          rows={3}
-          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+          rows={6}
+          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
           placeholder="General notes..."
         />
       </div>
@@ -252,7 +250,6 @@ export default function CompanyDetail({
               key={contact.id}
               contact={contact}
               onUpdate={(partial) => onUpdateContact(contact.id, partial)}
-              onGenerateMessage={() => onGenerateMessage(contact.id)}
             />
           ))}
           {contacts.length === 0 && (

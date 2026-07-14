@@ -1,3 +1,5 @@
+import { scoreContactRole } from '../find-contacts.js';
+
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
 
@@ -46,9 +48,20 @@ export async function onRequestPost(context) {
     ).bind(BATCH_SIZE).all();
 
     let processed = 0;
+    const jobTitlesByUser = new Map();
 
     for (const company of queued) {
       const userId = company.user_id;
+
+      if (!jobTitlesByUser.has(userId)) {
+        const settingsRow = await env.DB.prepare(
+          'SELECT job_titles FROM settings WHERE user_id = ?'
+        ).bind(userId).first();
+        let titles = [];
+        try { titles = JSON.parse(settingsRow?.job_titles || '[]'); } catch {}
+        jobTitlesByUser.set(userId, titles);
+      }
+      const userJobTitles = jobTitlesByUser.get(userId);
       try {
         // Research: enrich empty fields from the company dataset
         const companyHits = await searchDataset(
@@ -94,7 +107,13 @@ export async function onRequestPost(context) {
           const exactPeople = peopleHits.filter(
             (p) => (p.current_company_name || p.current_company?.name || '').trim().toLowerCase() === companyLower
           );
-          const people = exactPeople.length > 0 ? exactPeople : peopleHits;
+          // Keep only people matching the role criteria (hiring managers,
+          // relevant professionals, recruiters, or the user's peer roles)
+          const people = (exactPeople.length > 0 ? exactPeople : peopleHits)
+            .map((p) => ({ p, score: scoreContactRole(p.position || p.title || '', userJobTitles) }))
+            .filter(({ score }) => score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(({ p }) => p);
 
           let contactsSaved = 0;
           for (const person of people) {
@@ -114,12 +133,12 @@ export async function onRequestPost(context) {
             if (existingName) continue;
 
             await env.DB.prepare(
-              `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, other_social, rapport_notes, connection_status, message_drafts, notes, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'identified', '[]', '', ?)`
+              `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, location, other_social, rapport_notes, connection_status, message_drafts, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', '', 'identified', '[]', '', ?)`
             ).bind(
               crypto.randomUUID(), userId, company.id, company.name,
               name, person.position || person.title || '', linkedinUrl,
-              person.about || '',
+              person.city || person.location || '',
               new Date().toISOString()
             ).run();
             contactsSaved++;
