@@ -101,7 +101,7 @@ export default function JobFeed({
           ) : (
             <Search className="w-4 h-4" />
           )}
-          {loading ? 'Searching...' : 'Find Jobs'}
+          {loading ? 'Searching...' : 'Search for New Jobs'}
         </button>
       </div>
 
@@ -177,7 +177,7 @@ export default function JobFeed({
         <div className="text-center py-12">
           <Search className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">
-            No jobs found. Click &quot;Find Jobs&quot; to search.
+            No jobs found. Click &quot;Search for New Jobs&quot; to search.
           </p>
         </div>
       ) : (

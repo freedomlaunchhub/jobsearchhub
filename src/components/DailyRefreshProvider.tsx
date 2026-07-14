@@ -40,17 +40,6 @@ export default function DailyRefreshProvider({ children }: Props) {
     runDailyRefresh()
   }, [settings, triggered, runDailyRefresh])
 
-  // Listen for manual trigger from Settings page
-  useEffect(() => {
-    const handler = () => {
-      setSkipped(false)
-      setTriggered(true)
-      forceRefresh()
-    }
-    window.addEventListener('run-daily-briefing', handler)
-    return () => window.removeEventListener('run-daily-briefing', handler)
-  }, [forceRefresh])
-
   const handleSkip = useCallback(() => setSkipped(true), [])
   const handleRetry = useCallback(() => {
     setSkipped(false)

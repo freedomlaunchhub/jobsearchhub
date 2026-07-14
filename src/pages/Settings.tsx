@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, RefreshCw, LogOut } from 'lucide-react'
+import { Download, Upload, Trash2, LogOut } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
 import { getAllJobs, saveJobs } from '@/db/jobs'
@@ -174,12 +174,6 @@ export default function Settings() {
           </div>
         </Field>
 
-        <button
-          onClick={() => window.dispatchEvent(new Event('run-daily-briefing'))}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark"
-        >
-          <RefreshCw size={16} /> Run Daily Briefing Now
-        </button>
       </Section>
 
       <Section title="Data Management">
