@@ -90,13 +90,30 @@ export async function onRequestPost(context) {
       }
     );
 
+    // 422 means the filter matched zero records — a valid empty result
+    if (response.status === 422) {
+      return jsonResponse({ contacts: [], companyName, savedCount: 0, searchedAt: new Date().toISOString() });
+    }
+
     if (!response.ok) {
       const text = await response.text();
       return jsonResponse({ error: `Bright Data error (${response.status}): ${text}` }, 502);
     }
 
     const results = await response.json();
-    const items = results.hits || [];
+    let items = results.hits || [];
+
+    // 'includes' does substring matching, which also returns freelancers and
+    // agencies with the company name in their title (e.g. "Shopify Store
+    // designer"). Prefer people whose current company is an exact match;
+    // only fall back to the loose matches when no exact ones exist.
+    const companyLower = companyName.trim().toLowerCase();
+    const exactMatches = items.filter(
+      (p) => (p.current_company_name || p.current_company?.name || '').trim().toLowerCase() === companyLower
+    );
+    if (exactMatches.length > 0) {
+      items = exactMatches;
+    }
 
     const allRoles = [...targetRoles];
     for (const jt of userJobTitles) {
