@@ -16,11 +16,11 @@ export async function onRequestGet(context) {
     tests: {},
   };
 
-  // Test 1: Bright Data SERP
+  // Test: Real job search via Bright Data SERP
   if (env.BRIGHT_DATA_API_KEY) {
     try {
       const zone = env.BRIGHT_DATA_ZONE || 'serp_api';
-      const searchUrl = 'https://www.google.com/search?q=test&num=3&gl=ca&brd_json=1';
+      const searchUrl = 'https://www.google.com/search?q=%22Project+Manager%22+jobs+Calgary+site%3Alinkedin.com%2Fjobs&num=5&gl=ca&brd_json=1';
       const response = await fetch('https://api.brightdata.com/request', {
         method: 'POST',
         headers: {
@@ -30,45 +30,18 @@ export async function onRequestGet(context) {
         body: JSON.stringify({ zone, url: searchUrl, format: 'raw' }),
       });
       const text = await response.text();
-      results.tests.brightData = {
-        status: response.status,
-        ok: response.ok,
-        bodyPreview: text.slice(0, 500),
-      };
-    } catch (err) {
-      results.tests.brightData = { error: err.message };
-    }
-  } else {
-    results.tests.brightData = { error: 'No API key set' };
-  }
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch { /* raw text */ }
 
-  // Test 2: Anthropic API
-  if (env.ANTHROPIC_API_KEY) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5',
-          max_tokens: 50,
-          messages: [{ role: 'user', content: 'Reply with just the word "ok"' }],
-        }),
-      });
-      const text = await response.text();
-      results.tests.anthropic = {
+      results.tests.jobSearch = {
         status: response.status,
         ok: response.ok,
-        bodyPreview: text.slice(0, 500),
+        topLevelKeys: parsed ? Object.keys(parsed) : null,
+        fullResponse: parsed || text.slice(0, 3000),
       };
     } catch (err) {
-      results.tests.anthropic = { error: err.message };
+      results.tests.jobSearch = { error: err.message };
     }
-  } else {
-    results.tests.anthropic = { error: 'No API key set' };
   }
 
   return new Response(JSON.stringify(results, null, 2), {
