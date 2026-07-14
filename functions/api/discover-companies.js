@@ -14,11 +14,10 @@ function jsonResponse(data, status = 200) {
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 
 // One discovery imports the entire matching pool in a single request,
-// paging through the API internally. PAGE_SIZE keeps per-page memory small
-// (records carry heavy fields like post history); MAX_TOTAL bounds cost —
-// Bright Data charges ~$2.50 per 1,000 records returned.
-const PAGE_SIZE = 250;
-const MAX_TOTAL = 3000;
+// paging through the API internally until the criteria are exhausted.
+// PAGE_SIZE keeps per-page memory small (records carry heavy fields like
+// post history). Bright Data charges ~$2.50 per 1,000 records returned.
+const PAGE_SIZE = 500;
 
 // Canonical LinkedIn size buckets as stored in the Bright Data dataset
 // (values appear as e.g. "1,001-5,000 employees" — 'includes' matches the prefix).
@@ -99,7 +98,9 @@ export async function onRequestPost(context) {
     }
 
     const filter = filters.length === 1 ? filters[0] : { operator: 'and', filters };
-    const maxTotal = Math.min(limit || MAX_TOTAL, MAX_TOTAL);
+    // No default cap — the pull covers everything the selected criteria match.
+    // An explicit limit in the request body is still honored if provided.
+    const maxTotal = limit || Infinity;
 
     let existingNames = new Set();
     if (userId) {

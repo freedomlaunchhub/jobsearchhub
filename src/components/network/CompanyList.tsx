@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
-import { Plus, Search, ArrowUpDown, Upload, Compass } from 'lucide-react';
-import type { Company, CompanyPriority } from '../../db/schema';
+import { useState, useRef, useMemo } from 'react';
+import { Plus, Search, Upload, Compass } from 'lucide-react';
+import type { Company, CompanyPriority, CompanyStatus } from '../../db/schema';
 import type { DiscoverCompaniesResult } from '../../lib/api';
 import StatusBadge from '../common/StatusBadge';
 
@@ -26,12 +26,39 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 2,
 };
 
+const STATUS_LABELS: Record<CompanyStatus, string> = {
+  open_listing: 'Open listing',
+  new: 'New',
+  researched: 'Researched',
+  networking: 'Networking',
+  applied: 'Applied',
+  interviewing: 'Interviewing',
+};
+
+// Largest-first ordering for the size sort; matches dataset bucket strings
+// like "1,001-5,000 employees"
+const SIZE_ORDER = ['10,001+', '5,001-10,000', '1,001-5,000', '501-1,000', '201-500', '51-200', '11-50', '2-10'];
+
+function sizeRank(size: string): number {
+  if (!size) return SIZE_ORDER.length;
+  const idx = SIZE_ORDER.findIndex((bucket) => size.startsWith(bucket));
+  return idx === -1 ? SIZE_ORDER.length : idx;
+}
+
+type SortOption = 'priority' | 'alpha' | 'size' | 'newest';
+
+const PAGE_RENDER_LIMIT = 250;
+
 export default function CompanyList({
   companies, selectedId, onSelect, onAdd, onImport, onDiscover, canDiscover,
 }: CompanyListProps) {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'priority' | 'alpha'>('priority');
+  const [sortBy, setSortBy] = useState<SortOption>('priority');
+  const [statusFilter, setStatusFilter] = useState<'all' | CompanyStatus>('all');
+  const [industryFilter, setIndustryFilter] = useState('all');
+  const [sizeFilter, setSizeFilter] = useState('all');
+  const [showAll, setShowAll] = useState(false);
   const [formName, setFormName] = useState('');
   const [formIndustry, setFormIndustry] = useState('');
   const [formPriority, setFormPriority] = useState<CompanyPriority>('medium');
@@ -53,14 +80,42 @@ export default function CompanyList({
     e.target.value = '';
   }
 
-  const filtered = companies
+  const industries = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of companies) {
+      if (c.industry) counts.set(c.industry, (counts.get(c.industry) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [companies]);
+
+  const sizes = useMemo(() => {
+    const present = new Set(companies.map((c) => c.size).filter(Boolean));
+    return SIZE_ORDER.filter((bucket) => [...present].some((s) => String(s).startsWith(bucket)));
+  }, [companies]);
+
+  const filtered = useMemo(() => companies
     .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    .filter((c) => statusFilter === 'all' || c.status === statusFilter)
+    .filter((c) => industryFilter === 'all' || c.industry === industryFilter)
+    .filter((c) => sizeFilter === 'all' || String(c.size).startsWith(sizeFilter))
     .sort((a, b) => {
-      if (sortBy === 'priority') {
-        return (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2);
+      switch (sortBy) {
+        case 'priority': {
+          const diff = (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2);
+          return diff !== 0 ? diff : a.name.localeCompare(b.name);
+        }
+        case 'size': {
+          const diff = sizeRank(String(a.size)) - sizeRank(String(b.size));
+          return diff !== 0 ? diff : a.name.localeCompare(b.name);
+        }
+        case 'newest':
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        default:
+          return a.name.localeCompare(b.name);
       }
-      return a.name.localeCompare(b.name);
-    });
+    }), [companies, search, statusFilter, industryFilter, sizeFilter, sortBy]);
+
+  const visible = showAll ? filtered : filtered.slice(0, PAGE_RENDER_LIMIT);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,7 +137,11 @@ export default function CompanyList({
     try {
       const result = await onDiscover();
       if (result.savedCount > 0) {
-        setDiscoverResult(`Added ${result.savedCount} new companies`);
+        setDiscoverResult(
+          result.totalMatching
+            ? `Added ${result.savedCount} new companies (${result.totalMatching} matched your criteria)`
+            : `Added ${result.savedCount} new companies`
+        );
       } else if (result.total > 0) {
         setDiscoverResult(`Found ${result.total} companies (all already in your list)`);
       } else {
@@ -192,16 +251,61 @@ export default function CompanyList({
               className="w-full rounded-md border border-slate-300 pl-8 pr-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setSortBy(sortBy === 'priority' ? 'alpha' : 'priority')}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
-            title={sortBy === 'priority' ? 'Sort alphabetically' : 'Sort by priority'}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            title="Sort companies"
           >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            {sortBy === 'priority' ? 'Priority' : 'A-Z'}
-          </button>
+            <option value="priority">Priority</option>
+            <option value="alpha">A-Z</option>
+            <option value="size">Largest first</option>
+            <option value="newest">Newest</option>
+          </select>
         </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-2 mt-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | CompanyStatus)}
+            className="flex-1 min-w-0 rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            title="Filter by status"
+          >
+            <option value="all">All statuses</option>
+            {(Object.entries(STATUS_LABELS) as [CompanyStatus, string][]).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={industryFilter}
+            onChange={(e) => setIndustryFilter(e.target.value)}
+            className="flex-1 min-w-0 rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            title="Filter by industry"
+          >
+            <option value="all">All industries</option>
+            {industries.map(([industry, count]) => (
+              <option key={industry} value={industry}>{industry} ({count})</option>
+            ))}
+          </select>
+          <select
+            value={sizeFilter}
+            onChange={(e) => setSizeFilter(e.target.value)}
+            className="flex-1 min-w-0 rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            title="Filter by company size"
+          >
+            <option value="all">All sizes</option>
+            {sizes.map((bucket) => (
+              <option key={bucket} value={bucket}>{bucket}</option>
+            ))}
+          </select>
+        </div>
+
+        <p className="mt-2 text-xs text-muted">
+          {filtered.length === companies.length
+            ? `${companies.length} companies`
+            : `${filtered.length} of ${companies.length} companies`}
+        </p>
       </div>
 
       {/* List */}
@@ -210,7 +314,7 @@ export default function CompanyList({
           <p className="p-4 text-sm text-muted">No companies found</p>
         ) : (
           <ul>
-            {filtered.map((company) => {
+            {visible.map((company) => {
               const isSelected = company.id === selectedId;
               return (
                 <li key={company.id}>
@@ -250,6 +354,15 @@ export default function CompanyList({
               );
             })}
           </ul>
+        )}
+        {!showAll && filtered.length > PAGE_RENDER_LIMIT && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full py-3 text-xs font-medium text-indigo-600 hover:bg-indigo-50 border-t border-slate-100"
+          >
+            Show all {filtered.length} companies
+          </button>
         )}
       </div>
     </div>
