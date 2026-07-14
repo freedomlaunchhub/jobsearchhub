@@ -36,28 +36,49 @@ export default function Settings() {
     setDiscovering(true)
     setDiscoverResult(null)
     setDiscoverError(false)
+    // The server returns up to ~100 companies per call with a cursor; keep
+    // calling until the pool is exhausted, with live progress.
+    let saved = 0
+    let seen = 0
+    let totalMatching: number | null = null
+    let cursor: unknown[] | undefined
     try {
-      const result = await discoverCompanies({
-        industries: settings.preferredIndustries.length > 0 ? settings.preferredIndustries : undefined,
-        country: settings.discoveryCountry || undefined,
-        region: settings.discoveryLocation || undefined,
-        companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,
-      })
-      if (result.savedCount > 0) {
-        setDiscoverResult(`Added ${result.savedCount} new companies to your list`)
-      } else if (result.total > 0) {
-        setDiscoverResult(`Found ${result.total} companies (all already in your list)`)
+      do {
+        const result = await discoverCompanies({
+          industries: settings.preferredIndustries.length > 0 ? settings.preferredIndustries : undefined,
+          country: settings.discoveryCountry || undefined,
+          region: settings.discoveryLocation || undefined,
+          companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,
+          searchAfter: cursor,
+        })
+        saved += result.savedCount
+        seen += result.total
+        totalMatching = result.totalMatching ?? totalMatching
+        cursor = result.nextCursor ?? undefined
+        setDiscoverResult(
+          `Pulling companies... ${seen}${totalMatching ? ` of ${totalMatching.toLocaleString()}` : ''} (${saved} new)`
+        )
+      } while (cursor)
+
+      if (saved > 0) {
+        setDiscoverResult(`Added ${saved} new companies to your list`)
+      } else if (seen > 0) {
+        setDiscoverResult(`Found ${seen} companies (all already in your list)`)
       } else {
         setDiscoverResult('No companies found — try different criteria')
         setDiscoverError(true)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
-      setDiscoverResult(`Discovery failed: ${msg}`)
+      setDiscoverResult(
+        saved > 0
+          ? `Pull interrupted after ${saved} new companies — click again to continue. (${msg})`
+          : `Discovery failed: ${msg}`
+      )
       setDiscoverError(true)
     } finally {
       setDiscovering(false)
-      setTimeout(() => setDiscoverResult(null), 8000)
+      setTimeout(() => setDiscoverResult(null), 10000)
     }
   }
 
