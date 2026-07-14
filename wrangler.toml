@@ -1,0 +1,8 @@
+name = "job-search-hub"
+compatibility_date = "2026-07-01"
+
+[vars]
+# Non-secret environment variables go here
+
+# Secret env vars set via: wrangler secret put BRIGHT_DATA_API_KEY
+# Secret env vars set via: wrangler secret put ANTHROPIC_API_KEY
