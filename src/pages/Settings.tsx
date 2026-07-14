@@ -39,7 +39,7 @@ export default function Settings() {
       const result = await discoverCompanies({
         industry: settings.preferredIndustries[0] || undefined,
         location: settings.discoveryLocation || undefined,
-        companySize: settings.preferredCompanySizes[0] || undefined,
+        companySizes: settings.preferredCompanySizes.length > 0 ? settings.preferredCompanySizes : undefined,
       })
       if (result.savedCount > 0) {
         setDiscoverResult(`Added ${result.savedCount} new companies to your list`)

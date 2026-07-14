@@ -18,7 +18,7 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
-    const { industry, location, companySize, limit = 20 } = body;
+    const { industry, location, companySizes, limit = 20 } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -78,11 +78,10 @@ export async function onRequestPost(context) {
       existingNames = new Set(existing.map((r) => r.name));
     }
 
-    // Post-filter by company size in code (more reliable than API filter)
-    const sizeFiltered = companySize
+    const sizeFiltered = Array.isArray(companySizes) && companySizes.length > 0
       ? items.filter((c) => {
-          const size = c.company_size || '';
-          return size.toLowerCase().includes(companySize.toLowerCase());
+          const size = (c.company_size || '').replace(/,/g, '').toLowerCase();
+          return companySizes.some((s) => size.includes(s.toLowerCase()));
         })
       : items;
 
