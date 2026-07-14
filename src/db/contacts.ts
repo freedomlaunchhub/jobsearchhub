@@ -1,37 +1,44 @@
-import { format } from 'date-fns'
-import { getDB } from '@/db/connection'
 import type { Contact } from '@/db/schema'
 
+async function api(path: string, opts?: RequestInit) {
+  const res = await fetch(`/api/data/${path}`, { credentials: 'include', ...opts })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
 export async function getAllContacts(): Promise<Contact[]> {
-  const db = await getDB()
-  return db.getAll('contacts')
+  return api('contacts')
 }
 
 export async function getContactsByCompany(companyId: string): Promise<Contact[]> {
-  const db = await getDB()
-  return db.getAllFromIndex('contacts', 'by-companyId', companyId)
+  return api(`contacts?companyId=${companyId}`)
 }
 
 export async function getContact(id: string): Promise<Contact | undefined> {
-  const db = await getDB()
-  return db.get('contacts', id)
+  const all: Contact[] = await api('contacts')
+  return all.find(c => c.id === id)
 }
 
 export async function saveContact(contact: Contact): Promise<void> {
-  const db = await getDB()
-  await db.put('contacts', contact)
+  if (contact.createdAt) {
+    await api('contacts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contact),
+    })
+  } else {
+    await api('contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contact),
+    })
+  }
 }
 
 export async function deleteContact(id: string): Promise<void> {
-  const db = await getDB()
-  await db.delete('contacts', id)
+  await api(`contacts?id=${id}`, { method: 'DELETE' })
 }
 
 export async function getOverdueFollowups(): Promise<Contact[]> {
-  const db = await getDB()
-  const all = await db.getAll('contacts')
-  const today = format(new Date(), 'yyyy-MM-dd')
-  return all
-    .filter((c) => c.nextFollowupDate !== null && c.nextFollowupDate <= today)
-    .sort((a, b) => (a.nextFollowupDate! < b.nextFollowupDate! ? -1 : 1))
+  return api('contacts?overdue=true')
 }

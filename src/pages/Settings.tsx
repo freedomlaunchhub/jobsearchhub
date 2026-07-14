@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { Download, Upload, Trash2, Eye, EyeOff, RefreshCw, LogOut } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
-import { getDB } from '@/db/connection'
+import { getAllJobs, saveJobs } from '@/db/jobs'
+import { getAllCompanies, saveCompany } from '@/db/companies'
+import { getAllContacts, saveContact } from '@/db/contacts'
+import { getSettings, saveSettings } from '@/db/settings'
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useSettings()
@@ -22,14 +25,13 @@ export default function Settings() {
   }
 
   const handleExport = async () => {
-    const db = await getDB()
-    const data = {
-      settings: await db.get('settings', 'config'),
-      jobs: await db.getAll('jobs'),
-      companies: await db.getAll('companies'),
-      contacts: await db.getAll('contacts'),
-      dailyLogs: await db.getAll('dailyLogs'),
-    }
+    const [exportSettings, jobs, companies, contacts] = await Promise.all([
+      getSettings(),
+      getAllJobs(),
+      getAllCompanies(),
+      getAllContacts(),
+    ])
+    const data = { settings: exportSettings, jobs, companies, contacts }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -48,17 +50,10 @@ export default function Settings() {
       if (!file) return
       const text = await file.text()
       const data = JSON.parse(text)
-      const db = await getDB()
-      const tx = db.transaction(
-        ['settings', 'jobs', 'companies', 'contacts', 'dailyLogs'],
-        'readwrite'
-      )
-      if (data.settings) await tx.objectStore('settings').put(data.settings)
-      for (const job of data.jobs || []) await tx.objectStore('jobs').put(job)
-      for (const company of data.companies || []) await tx.objectStore('companies').put(company)
-      for (const contact of data.contacts || []) await tx.objectStore('contacts').put(contact)
-      for (const log of data.dailyLogs || []) await tx.objectStore('dailyLogs').put(log)
-      await tx.done
+      if (data.settings) await saveSettings(data.settings)
+      if (data.jobs) await saveJobs(data.jobs)
+      if (data.companies) for (const c of data.companies) await saveCompany(c)
+      if (data.contacts) for (const c of data.contacts) await saveContact(c)
       window.location.reload()
     }
     input.click()
@@ -69,22 +64,44 @@ export default function Settings() {
       setConfirmClear(store)
       return
     }
-    const db = await getDB()
-    if (store === 'all') {
-      await db.clear('jobs')
-      await db.clear('companies')
-      await db.clear('contacts')
-      await db.clear('dailyLogs')
-    } else {
-      await db.clear(store)
+    const stores = store === 'all' ? ['jobs', 'companies', 'contacts'] : [store]
+    for (const s of stores) {
+      const res = await fetch(`/api/data/${s}/clear`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const items = s === 'jobs' ? await getAllJobs()
+          : s === 'companies' ? await getAllCompanies()
+          : await getAllContacts()
+        for (const item of items) {
+          await fetch(`/api/data/${s}?id=${(item as { id: string }).id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          })
+        }
+      }
     }
     setConfirmClear(null)
     window.location.reload()
   }
 
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    window.location.reload()
+  }
+
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Settings</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-100"
+        >
+          <LogOut size={16} /> Sign Out
+        </button>
+      </div>
 
       <Section title="Job Search Configuration">
         <Field label="Job Titles">

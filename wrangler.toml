@@ -7,3 +7,13 @@ compatibility_date = "2026-07-01"
 
 # Secret env vars set via: wrangler secret put BRIGHT_DATA_API_KEY
 # Secret env vars set via: wrangler secret put ANTHROPIC_API_KEY
+# Secret env vars set via: wrangler secret put CRON_SECRET
+
+[[d1_databases]]
+binding = "DB"
+database_name = "job-search-hub"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_YOUR_KV_ID"

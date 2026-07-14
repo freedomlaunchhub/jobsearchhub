@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Job, JobStatus } from '@/db/schema'
-import { getAllJobs, saveJob, deleteJob } from '@/db/jobs'
+import { getAllJobs, saveJob, saveJobs, deleteJob } from '@/db/jobs'
 
 export function useJobs() {
   const [jobs, setJobs] = useState<Job[]>([])
@@ -17,10 +17,8 @@ export function useJobs() {
     async (newJobs: Job[]) => {
       const existingIds = new Set(jobs.map((j) => j.id))
       const unique = newJobs.filter((j) => !existingIds.has(j.id))
-      for (const job of unique) {
-        await saveJob(job)
-      }
       if (unique.length > 0) {
+        await saveJobs(unique)
         setJobs((prev) => [...prev, ...unique])
       }
     },
