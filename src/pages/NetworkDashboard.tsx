@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useCompanies } from '@/hooks/useCompanies'
 import { useContacts } from '@/hooks/useContacts'
+import { useSettings } from '@/hooks/useSettings'
 import { useDailyLog } from '@/hooks/useDailyLog'
 import Dream100Progress from '@/components/network/Dream100Progress'
 import FollowUpQueue from '@/components/network/FollowUpQueue'
 import CompanyList from '@/components/network/CompanyList'
 import CompanyDetail from '@/components/network/CompanyDetail'
+import { researchCompany, researchContact, generateMessage } from '@/lib/api'
 import type { Company, Contact } from '@/db/schema'
 
 export default function NetworkDashboard() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const { settings } = useSettings()
   const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts } = useCompanies()
   const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone } = useContacts()
   const { incrementField } = useDailyLog()
@@ -46,6 +49,73 @@ export default function NetworkDashboard() {
     await incrementField('followupsDone')
   }
 
+  const handleResearchCompany = async () => {
+    if (!selectedCompany || !settings) return
+    try {
+      const result = await researchCompany({
+        companyName: selectedCompany.name,
+        location: settings.location,
+        brightDataApiKey: settings.brightDataApiKey,
+        anthropicApiKey: settings.anthropicApiKey,
+      }) as Record<string, unknown>
+      await updateCompany(selectedCompany.id, {
+        website: (result.website as string) || selectedCompany.website,
+        careersUrl: (result.careersUrl as string) || selectedCompany.careersUrl,
+        linkedinUrl: (result.linkedinUrl as string) || selectedCompany.linkedinUrl,
+        industry: (result.industry as string) || selectedCompany.industry,
+        size: (result.size as Company['size']) || selectedCompany.size,
+        notes: selectedCompany.notes + '\n\n' + ((result.summary as string) || ''),
+      })
+    } catch {
+      // API not configured or failed
+    }
+  }
+
+  const handleResearchContact = async (contactId: string) => {
+    if (!settings) return
+    const contact = selectedContacts.find((c) => c.id === contactId)
+    if (!contact) return
+    try {
+      const result = await researchContact({
+        name: contact.name,
+        title: contact.title,
+        company: contact.companyName,
+        linkedinUrl: contact.linkedinUrl,
+        brightDataApiKey: settings.brightDataApiKey,
+        anthropicApiKey: settings.anthropicApiKey,
+      }) as Record<string, unknown>
+      await updateContact(contactId, {
+        rapportNotes: (result.rapportNotes as string) || contact.rapportNotes,
+        messageDrafts: (result.connectionMessages as string[]) || contact.messageDrafts,
+      })
+    } catch {
+      // API not configured or failed
+    }
+  }
+
+  const handleGenerateMessage = async (contactId: string) => {
+    if (!settings) return
+    const contact = selectedContacts.find((c) => c.id === contactId)
+    if (!contact) return
+    try {
+      const result = await generateMessage({
+        contactName: contact.name,
+        contactTitle: contact.title,
+        company: contact.companyName,
+        rapportNotes: contact.rapportNotes,
+        messageType: 'connection',
+        previousMessages: contact.messageDrafts,
+        additionalContext: '',
+        anthropicApiKey: settings.anthropicApiKey,
+      })
+      await updateContact(contactId, {
+        messageDrafts: [...contact.messageDrafts, result.message],
+      })
+    } catch {
+      // API not configured or failed
+    }
+  }
+
   if (companiesLoading || contactsLoading) {
     return <div className="text-muted">Loading...</div>
   }
@@ -80,9 +150,9 @@ export default function NetworkDashboard() {
               onAddContact={handleAddContact}
               onUpdateContact={updateContact}
               onDeleteCompany={handleDeleteCompany}
-              onResearchCompany={() => {}}
-              onResearchContact={() => {}}
-              onGenerateMessage={() => {}}
+              onResearchCompany={handleResearchCompany}
+              onResearchContact={handleResearchContact}
+              onGenerateMessage={handleGenerateMessage}
             />
           ) : (
             <div className="bg-white rounded-xl shadow-sm p-8 text-center text-muted">
