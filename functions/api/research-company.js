@@ -23,6 +23,7 @@ export async function onRequestPost(context) {
     const { companyName, location } = body;
     const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
     const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
+    const brightDataZone = body.brightDataZone || env.BRIGHT_DATA_ZONE || 'serp_api';
 
     if (!companyName) {
       return jsonResponse({ error: 'companyName is required' }, 400);
@@ -36,16 +37,17 @@ export async function onRequestPost(context) {
 
     // Step 1: Search for company info via Bright Data SERP
     const query = `${companyName} ${location || ''} careers company overview`.trim();
-    const serpResponse = await fetch('https://api.brightdata.com/serp/req', {
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&gl=ca&brd_json=1`;
+    const serpResponse = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${brightDataApiKey}`,
       },
       body: JSON.stringify({
-        query,
-        country: 'ca',
-        num_results: 20,
+        zone: brightDataZone,
+        url: searchUrl,
+        format: 'raw',
       }),
     });
 
@@ -54,7 +56,13 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: `Bright Data API error (${serpResponse.status}): ${text}` }, 502);
     }
 
-    const serpResults = await serpResponse.json();
+    const serpText = await serpResponse.text();
+    let serpResults;
+    try {
+      serpResults = JSON.parse(serpText);
+    } catch {
+      serpResults = { raw: serpText.slice(0, 5000) };
+    }
 
     // Step 2: Use Anthropic to summarize into structured company data
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
