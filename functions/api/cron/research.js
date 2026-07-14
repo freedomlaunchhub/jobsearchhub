@@ -1,4 +1,4 @@
-import { scoreContactRole, buildRoleKeywords } from '../find-contacts.js';
+import { scoreContactRole, buildRoleKeywords, currentTitleAt, isExcludedTitle, aiRelevanceScreen } from '../find-contacts.js';
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
@@ -55,13 +55,13 @@ export async function onRequestPost(context) {
 
       if (!jobTitlesByUser.has(userId)) {
         const settingsRow = await env.DB.prepare(
-          'SELECT job_titles FROM settings WHERE user_id = ?'
+          'SELECT job_titles, discovery_country FROM settings WHERE user_id = ?'
         ).bind(userId).first();
         let titles = [];
         try { titles = JSON.parse(settingsRow?.job_titles || '[]'); } catch {}
-        jobTitlesByUser.set(userId, titles);
+        jobTitlesByUser.set(userId, { titles, country: settingsRow?.discovery_country || '' });
       }
-      const userJobTitles = jobTitlesByUser.get(userId);
+      const { titles: userJobTitles, country } = jobTitlesByUser.get(userId);
       try {
         // Research: enrich empty fields from the company dataset
         const companyHits = await searchDataset(
@@ -99,24 +99,28 @@ export async function onRequestPost(context) {
         // the company for matching titles, not an arbitrary sample. The
         // multi-phrase search can time out — retry once, then fall back to
         // an unfiltered sample that gets filtered locally.
+        const baseFilters = [
+          { name: 'current_company_name', operator: 'includes', value: company.name },
+        ];
+        if (country) {
+          baseFilters.push({ name: 'country_code', operator: '=', value: country });
+        }
         const roleFilter = {
           operator: 'and',
           filters: [
-            { name: 'current_company_name', operator: 'includes', value: company.name },
+            ...baseFilters,
             { name: 'position', operator: 'includes', value: buildRoleKeywords(userJobTitles) },
           ],
         };
-        let usedFallback = false;
         let peopleHits = await searchDataset(PEOPLE_DATASET_ID, roleFilter, 25, brightDataApiKey);
         if (peopleHits === null) {
           await new Promise((r) => setTimeout(r, 2000));
           peopleHits = await searchDataset(PEOPLE_DATASET_ID, roleFilter, 25, brightDataApiKey);
         }
         if (peopleHits === null) {
-          usedFallback = true;
           peopleHits = await searchDataset(
             PEOPLE_DATASET_ID,
-            { name: 'current_company_name', operator: 'includes', value: company.name },
+            baseFilters.length === 1 ? baseFilters[0] : { operator: 'and', filters: baseFilters },
             25,
             brightDataApiKey
           );
@@ -127,17 +131,33 @@ export async function onRequestPost(context) {
           const exactPeople = peopleHits.filter(
             (p) => (p.current_company_name || p.current_company?.name || '').trim().toLowerCase() === companyLower
           );
-          // Query already restricted to role criteria; the score just orders
-          // (hiring managers first, peers last). Only the unfiltered fallback
-          // sample needs a local discard of non-matches.
-          const people = (exactPeople.length > 0 ? exactPeople : peopleHits)
-            .map((p) => ({ p, score: scoreContactRole(p.position || p.title || '', userJobTitles) }))
-            .filter(({ score }) => !usedFallback || score > 0)
-            .sort((a, b) => b.score - a.score)
-            .map(({ p }) => p);
+          // Judge by the actual current job title at the company (headlines
+          // are noisy free-form text); excluded functions are dropped
+          let people = (exactPeople.length > 0 ? exactPeople : peopleHits)
+            .map((p) => {
+              const cleanTitle = currentTitleAt(p, company.name);
+              return {
+                p,
+                cleanTitle,
+                score: isExcludedTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
+              };
+            })
+            .filter(({ score }) => score > 0)
+            .sort((a, b) => b.score - a.score);
+
+          // Final AI pass on the narrowed list; on failure keep the
+          // deterministic result
+          const verdicts = await aiRelevanceScreen(
+            people.map(({ cleanTitle }) => ({ title: cleanTitle })),
+            userJobTitles,
+            env.ANTHROPIC_API_KEY
+          );
+          if (verdicts) {
+            people = people.filter((_, i) => verdicts[i]);
+          }
 
           let contactsSaved = 0;
-          for (const person of people) {
+          for (const { p: person, cleanTitle } of people) {
             const name = person.name || person.full_name || '';
             if (!name) continue;
 
@@ -158,7 +178,7 @@ export async function onRequestPost(context) {
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', '', 'identified', '[]', '', ?)`
             ).bind(
               crypto.randomUUID(), userId, company.id, company.name,
-              name, person.position || person.title || '', linkedinUrl,
+              name, cleanTitle, linkedinUrl,
               person.city || person.location || '',
               new Date().toISOString()
             ).run();

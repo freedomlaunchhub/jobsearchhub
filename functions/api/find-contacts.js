@@ -48,6 +48,95 @@ export function scoreContactRole(position, peerTitles) {
   return 0;
 }
 
+// Titles matching these are noise for job-search networking regardless of
+// seniority keywords: they recruit customers/students (not employees) or
+// work in functions that don't hire for the user's target roles.
+const NEGATIVE_KEYWORDS = [
+  'student recruit', 'international recruit', 'admission', 'enrollment', 'enrolment',
+  'sales', 'account manag', 'account executive', 'account support', 'customer',
+  'client relations', 'business development', 'marketing',
+];
+
+export function isExcludedTitle(title) {
+  const t = title.toLowerCase();
+  return NEGATIVE_KEYWORDS.some((k) => t.includes(k));
+}
+
+// Final screen: after the deterministic filters (country, current-title role
+// match, exclusion list) have narrowed candidates to a handful, one cheap
+// model call judges the ambiguous cases keyword rules can't ("Recruitment
+// Manager" at an edtech = student recruitment, not talent acquisition).
+// Returns booleans aligned with candidates, or null when unavailable — the
+// caller then keeps everyone rather than failing.
+export async function aiRelevanceScreen(candidates, userJobTitles, anthropicApiKey) {
+  if (!anthropicApiKey || candidates.length === 0) return null;
+
+  const list = candidates.map((c, i) => `${i}. ${c.title}`).join('\n');
+  const prompt = `You are screening employees at one company as networking targets for a job seeker.
+
+KEEP a person ONLY if their job title clearly indicates one of:
+1. Hiring manager / leadership: Senior Manager, Director, Head of a function, VP / Vice President
+2. Relevant professional: Project Manager, Program Manager, Business Analyst
+3. TALENT recruiter: internal Recruiter, Talent Acquisition, Talent Partner — recruits EMPLOYEES for the company
+4. Peer: works as one of: ${(userJobTitles || []).join(', ') || '(none listed)'}
+
+DISCARD:
+- Roles recruiting customers or students (student recruitment, international recruitment, admissions, enrollment)
+- Sales, account management, customer success/relations, business development, marketing
+- Junior staff, specialists, coordinators, associates, interns
+- Ambiguous titles — when in doubt, discard
+
+Job titles:
+${list}
+
+Reply with ONLY a JSON array of the numbers to KEEP, e.g. [0,3,7]. Reply [] if none qualify.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\[[\d,\s]*\]/);
+    if (!match) return null;
+    const keep = new Set(JSON.parse(match[0]));
+    return candidates.map((_, i) => keep.has(i));
+  } catch {
+    return null;
+  }
+}
+
+// The dataset's `position` field is the profile HEADLINE — free-form marketing
+// text ("Recruiter | US IT | Canada PR..."). The experience section carries the
+// person's actual current job title at the company; prefer it for matching.
+export function currentTitleAt(person, companyName) {
+  const companyLower = companyName.trim().toLowerCase();
+  for (const exp of person.experience || []) {
+    const expCompany = (exp.company || '').trim().toLowerCase();
+    if (expCompany && expCompany !== companyLower) continue;
+    // Grouped roles at one company nest under `positions`, newest first
+    if (Array.isArray(exp.positions) && exp.positions.length > 0) {
+      const current = exp.positions.find((p) => p.end_date === 'Present') || exp.positions[0];
+      if (current?.title) return current.title;
+    }
+    if (exp.title && (exp.end_date === 'Present' || !exp.end_date || expCompany === companyLower)) {
+      return exp.title;
+    }
+  }
+  return person.position || person.title || '';
+}
+
 export async function onRequestPost(context) {
   const { request, env, data } = context;
 
@@ -68,27 +157,36 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'Bright Data API key not configured on server' }, 500);
     }
 
-    // Pull user's job titles from settings to build context-aware role matching
+    // Pull user's job titles (peer matching) and discovery country from settings
     let userJobTitles = [];
+    let country = '';
     if (userId) {
       const settingsRow = await env.DB.prepare(
-        'SELECT job_titles FROM settings WHERE user_id = ?'
+        'SELECT job_titles, discovery_country FROM settings WHERE user_id = ?'
       ).bind(userId).first();
       if (settingsRow?.job_titles) {
         try {
           userJobTitles = JSON.parse(settingsRow.job_titles);
         } catch {}
       }
+      country = settingsRow?.discovery_country || '';
     }
 
     // Role keywords go INTO the query (array 'includes' = match any), so the
     // search scans everyone at the company for matching titles instead of
     // filtering an arbitrary 25-person sample afterwards.
+    const baseFilters = [
+      { name: 'current_company_name', value: companyName, operator: 'includes' },
+    ];
+    if (country) {
+      baseFilters.push({ name: 'country_code', operator: '=', value: country });
+    }
+
     const roleFilteredBody = {
       filter: {
         operator: 'and',
         filters: [
-          { name: 'current_company_name', value: companyName, operator: 'includes' },
+          ...baseFilters,
           { name: 'position', operator: 'includes', value: buildRoleKeywords(userJobTitles) },
         ],
       },
@@ -97,7 +195,7 @@ export async function onRequestPost(context) {
     // Fallback when the role-filtered query times out on Bright Data's side:
     // sample the company without the position filter and filter locally.
     const companyOnlyBody = {
-      filter: { name: 'current_company_name', value: companyName, operator: 'includes' },
+      filter: baseFilters.length === 1 ? baseFilters[0] : { operator: 'and', filters: baseFilters },
       size: 25,
     };
 
@@ -111,7 +209,6 @@ export async function onRequestPost(context) {
         body: JSON.stringify(body),
       });
 
-    let usedFallback = false;
     let response = await search(roleFilteredBody);
     if (!response.ok && response.status !== 422) {
       // The multi-phrase search can be slow; one retry usually hits warm caches
@@ -119,7 +216,6 @@ export async function onRequestPost(context) {
       response = await search(roleFilteredBody);
     }
     if (!response.ok && response.status !== 422) {
-      usedFallback = true;
       response = await search(companyOnlyBody);
     }
 
@@ -148,21 +244,25 @@ export async function onRequestPost(context) {
       items = exactMatches;
     }
 
-    // The role-filtered query already restricted results to the criteria; the
-    // local score just orders them (hiring managers first, peers last). Only
-    // the unfiltered fallback sample needs a local discard of non-matches.
-    let scored = items.map((person) => ({
-      person,
-      score: scoreContactRole(person.position || person.title || '', userJobTitles),
-    }));
-    if (usedFallback) {
-      scored = scored.filter(({ score }) => score > 0);
-    }
+    // Judge each person by their actual current job title at the company (the
+    // headline the query matched on is free-form text and full of noise).
+    // Titles in excluded functions (student recruitment, sales, admissions...)
+    // are dropped no matter what keywords they contain.
+    const scored = items
+      .map((person) => {
+        const cleanTitle = currentTitleAt(person, companyName);
+        return {
+          person,
+          cleanTitle,
+          score: isExcludedTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
+        };
+      })
+      .filter(({ score }) => score > 0);
     scored.sort((a, b) => b.score - a.score);
 
     const seen = new Set();
-    const contacts = [];
-    for (const { person } of scored) {
+    let contacts = [];
+    for (const { person, cleanTitle } of scored) {
       const linkedinUrl = person.url || person.linkedin_url || '';
       const name = person.name || person.full_name || '';
       if (!name) continue;
@@ -171,10 +271,17 @@ export async function onRequestPost(context) {
       seen.add(key);
       contacts.push({
         name,
-        title: person.position || person.title || '',
+        title: cleanTitle,
         linkedinUrl,
         location: person.city || person.location || '',
       });
+    }
+
+    // Final AI pass over the already-narrowed list (one cheap call); on
+    // failure keep the deterministic result rather than erroring
+    const verdicts = await aiRelevanceScreen(contacts, userJobTitles, env.ANTHROPIC_API_KEY);
+    if (verdicts) {
+      contacts = contacts.filter((_, i) => verdicts[i]);
     }
 
     let savedCount = 0;
