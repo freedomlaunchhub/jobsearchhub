@@ -32,7 +32,7 @@ export async function onRequestPost(context) {
 
     const filters = [];
     if (industry) {
-      filters.push({ name: 'industry', value: industry, operator: 'contains' });
+      filters.push({ name: 'industries', value: industry, operator: 'contains' });
     }
     if (location) {
       filters.push({ name: 'headquarters', value: location, operator: 'contains' });

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, LogOut } from 'lucide-react'
+import { Download, Upload, Trash2, LogOut, Compass } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
+import { discoverCompanies } from '@/lib/api'
 import { getAllJobs, saveJobs } from '@/db/jobs'
 import { getAllCompanies, saveCompany } from '@/db/companies'
 import { getAllContacts, saveContact } from '@/db/contacts'
@@ -10,6 +11,9 @@ import { getSettings, saveSettings } from '@/db/settings'
 export default function Settings() {
   const { settings, loading, updateSettings } = useSettings()
   const [confirmClear, setConfirmClear] = useState<string | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverResult, setDiscoverResult] = useState<string | null>(null)
+  const [discoverError, setDiscoverError] = useState(false)
 
   if (loading || !settings) {
     return <div className="text-muted">Loading settings...</div>
@@ -20,6 +24,38 @@ export default function Settings() {
       s.id === sourceId ? { ...s, enabled: !s.enabled } : s
     )
     updateSettings({ jobSources: updated })
+  }
+
+  const handleDiscover = async () => {
+    const hasFilters = settings.preferredIndustries.length > 0 ||
+      settings.preferredCompanySizes.length > 0 ||
+      settings.location
+    if (!hasFilters) return
+
+    setDiscovering(true)
+    setDiscoverResult(null)
+    setDiscoverError(false)
+    try {
+      const result = await discoverCompanies({
+        industry: settings.preferredIndustries[0] || undefined,
+        location: settings.location || undefined,
+        companySize: settings.preferredCompanySizes[0] || undefined,
+      })
+      if (result.savedCount > 0) {
+        setDiscoverResult(`Added ${result.savedCount} new companies to your list`)
+      } else if (result.total > 0) {
+        setDiscoverResult(`Found ${result.total} companies (all already in your list)`)
+      } else {
+        setDiscoverResult('No companies found — try different criteria')
+        setDiscoverError(true)
+      }
+    } catch {
+      setDiscoverResult('Discovery failed — check your criteria and try again')
+      setDiscoverError(true)
+    } finally {
+      setDiscovering(false)
+      setTimeout(() => setDiscoverResult(null), 8000)
+    }
   }
 
   const handleExport = async () => {
@@ -89,6 +125,10 @@ export default function Settings() {
     window.location.reload()
   }
 
+  const canDiscover = settings.preferredIndustries.length > 0 ||
+    settings.preferredCompanySizes.length > 0 ||
+    settings.location
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
@@ -117,6 +157,7 @@ export default function Settings() {
             onChange={(e) => updateSettings({ location: e.target.value })}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           />
+          <p className="text-xs text-muted mt-1">Used for job search and company discovery</p>
         </Field>
 
         <div className="flex items-center gap-3 mb-4">
@@ -205,6 +246,28 @@ export default function Settings() {
             ))}
           </div>
         </Field>
+
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <p className="text-xs text-muted mb-3">
+            Searches LinkedIn for companies matching your industry, location, and size preferences.
+            New companies are added to your Network HQ list with "New" status.
+          </p>
+          <button
+            onClick={handleDiscover}
+            disabled={discovering || !canDiscover}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Compass size={16} />
+            {discovering ? 'Discovering...' : 'Discover Companies Now'}
+          </button>
+          {discoverResult && (
+            <p className={`mt-2 text-sm px-3 py-2 rounded-md ${
+              discoverError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+            }`}>
+              {discoverResult}
+            </p>
+          )}
+        </div>
       </Section>
 
       <Section title="Data Management">

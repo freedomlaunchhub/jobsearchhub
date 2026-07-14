@@ -130,13 +130,21 @@ export default function NetworkDashboard() {
     }
   }
 
-  const handleDiscover = async (params: { industry?: string; location?: string; companySize?: string }) => {
-    const result = await discoverCompanies(params)
+  const handleDiscover = async () => {
+    const result = await discoverCompanies({
+      industry: settings?.preferredIndustries[0] || undefined,
+      location: settings?.location || undefined,
+      companySize: settings?.preferredCompanySizes[0] || undefined,
+    })
     if (result.savedCount > 0) {
       await refreshCompanies()
     }
     return result
   }
+
+  const canDiscover = (settings?.preferredIndustries.length ?? 0) > 0 ||
+    (settings?.preferredCompanySizes.length ?? 0) > 0 ||
+    !!settings?.location
 
   if (companiesLoading || contactsLoading) {
     return <div className="text-muted">Loading...</div>
@@ -162,9 +170,7 @@ export default function NetworkDashboard() {
             onAdd={handleAddCompany}
             onImport={handleImportCompanies}
             onDiscover={handleDiscover}
-            defaultIndustries={settings?.preferredIndustries ?? []}
-            defaultLocation={settings?.location ?? ''}
-            defaultCompanySizes={settings?.preferredCompanySizes ?? []}
+            canDiscover={canDiscover}
           />
         </div>
 
