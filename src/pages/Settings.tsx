@@ -157,7 +157,7 @@ export default function Settings() {
             onChange={(e) => updateSettings({ location: e.target.value })}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           />
-          <p className="text-xs text-muted mt-1">Used for job search and company discovery</p>
+          <p className="text-xs text-muted mt-1">Used for job search results</p>
         </Field>
 
         <div className="flex items-center gap-3 mb-4">
