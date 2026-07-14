@@ -66,5 +66,10 @@ export function useCompanies() {
     return counts
   }, [companies])
 
-  return { companies, loading, addCompany, updateCompany, removeCompany, statusCounts }
+  const refresh = useCallback(async () => {
+    const loaded = await getAllCompanies()
+    setCompanies(loaded)
+  }, [])
+
+  return { companies, loading, addCompany, updateCompany, removeCompany, statusCounts, refresh }
 }

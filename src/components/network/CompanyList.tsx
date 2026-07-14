@@ -1,7 +1,13 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, ArrowUpDown, Upload } from 'lucide-react';
+import { Plus, Search, ArrowUpDown, Upload, Zap } from 'lucide-react';
 import type { Company, CompanyPriority } from '../../db/schema';
 import StatusBadge from '../common/StatusBadge';
+
+interface BulkProgress {
+  current: number;
+  total: number;
+  companyName: string;
+}
 
 interface CompanyListProps {
   companies: Company[];
@@ -9,6 +15,8 @@ interface CompanyListProps {
   onSelect: (id: string) => void;
   onAdd: (company: Partial<Company>) => void;
   onImport: (csvText: string) => void;
+  onResearchAll: () => void;
+  bulkProgress: BulkProgress | null;
 }
 
 const PRIORITY_DOT_COLORS: Record<string, string> = {
@@ -23,7 +31,7 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 2,
 };
 
-export default function CompanyList({ companies, selectedId, onSelect, onAdd, onImport }: CompanyListProps) {
+export default function CompanyList({ companies, selectedId, onSelect, onAdd, onImport, onResearchAll, bulkProgress }: CompanyListProps) {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'priority' | 'alpha'>('priority');
@@ -101,6 +109,30 @@ export default function CompanyList({ companies, selectedId, onSelect, onAdd, on
             </button>
           </div>
         </div>
+
+        {companies.length > 0 && (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={onResearchAll}
+              disabled={!!bulkProgress}
+              className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              {bulkProgress
+                ? `Researching ${bulkProgress.current}/${bulkProgress.total}: ${bulkProgress.companyName}`
+                : 'Research All Companies'}
+            </button>
+            {bulkProgress && (
+              <div className="mt-1.5 w-full bg-slate-200 rounded-full h-1.5">
+                <div
+                  className="bg-accent h-1.5 rounded-full transition-all"
+                  style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Add form */}
         {showForm && (

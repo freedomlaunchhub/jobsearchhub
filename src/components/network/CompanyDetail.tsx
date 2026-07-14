@@ -3,6 +3,11 @@ import { ExternalLink, Plus, Trash2, Search, Users } from 'lucide-react';
 import type { Company, Contact, CompanyStatus, CompanyPriority } from '../../db/schema';
 import ContactCard from './ContactCard';
 
+interface ResearchAndFindResult {
+  researchResult: string | null;
+  findResult: { savedCount: number; total: number } | null;
+}
+
 interface CompanyDetailProps {
   company: Company;
   contacts: Contact[];
@@ -10,8 +15,7 @@ interface CompanyDetailProps {
   onAddContact: (contact: Partial<Contact>) => void;
   onUpdateContact: (id: string, partial: Partial<Contact>) => void;
   onDeleteCompany: () => void;
-  onResearchCompany: () => void;
-  onFindPeople: () => Promise<{ savedCount: number; contacts: unknown[] } | undefined>;
+  onResearchAndFind: () => Promise<ResearchAndFindResult | undefined>;
   onGenerateMessage: (contactId: string) => void;
 }
 
@@ -25,8 +29,7 @@ export default function CompanyDetail({
   onAddContact,
   onUpdateContact,
   onDeleteCompany,
-  onResearchCompany,
-  onFindPeople,
+  onResearchAndFind,
   onGenerateMessage,
 }: CompanyDetailProps) {
   const [showContactForm, setShowContactForm] = useState(false);
@@ -34,8 +37,8 @@ export default function CompanyDetail({
   const [contactTitle, setContactTitle] = useState('');
   const [contactLinkedin, setContactLinkedin] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [findingPeople, setFindingPeople] = useState(false);
-  const [findPeopleResult, setFindPeopleResult] = useState<string | null>(null);
+  const [researching, setResearching] = useState(false);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
 
   function handleAddContact(e: React.FormEvent) {
     e.preventDefault();
@@ -53,23 +56,28 @@ export default function CompanyDetail({
     setShowContactForm(false);
   }
 
-  async function handleFindPeople() {
-    setFindingPeople(true);
-    setFindPeopleResult(null);
+  async function handleResearchAndFind() {
+    setResearching(true);
+    setResultMessage(null);
     try {
-      const result = await onFindPeople();
+      const result = await onResearchAndFind();
       if (result) {
-        setFindPeopleResult(
-          result.savedCount > 0
-            ? `Found and saved ${result.savedCount} new contact${result.savedCount === 1 ? '' : 's'}`
-            : `Found ${result.contacts.length} people (all already saved)`
-        );
+        const parts: string[] = [];
+        if (result.researchResult === 'done') parts.push('Company info updated');
+        if (result.findResult) {
+          if (result.findResult.savedCount > 0) {
+            parts.push(`${result.findResult.savedCount} new contact${result.findResult.savedCount === 1 ? '' : 's'} saved`);
+          } else {
+            parts.push(`${result.findResult.total} people found (all already saved)`);
+          }
+        }
+        setResultMessage(parts.join(' · ') || 'Done');
       }
     } catch {
-      setFindPeopleResult('Failed to find people');
+      setResultMessage('Research failed');
     } finally {
-      setFindingPeople(false);
-      setTimeout(() => setFindPeopleResult(null), 5000);
+      setResearching(false);
+      setTimeout(() => setResultMessage(null), 6000);
     }
   }
 
@@ -182,32 +190,15 @@ export default function CompanyDetail({
           <h3 className="text-sm font-semibold text-slate-700">
             Contacts ({contacts.length})
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleFindPeople}
-              disabled={findingPeople}
-              className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-            >
-              <Users className="w-3.5 h-3.5" />
-              {findingPeople ? 'Searching...' : 'Find People'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowContactForm(!showContactForm)}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Contact
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowContactForm(!showContactForm)}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Contact
+          </button>
         </div>
-
-        {findPeopleResult && (
-          <div className="mb-3 px-3 py-2 bg-emerald-50 text-emerald-700 text-xs rounded-md">
-            {findPeopleResult}
-          </div>
-        )}
 
         {/* Add contact form */}
         {showContactForm && (
@@ -261,41 +252,51 @@ export default function CompanyDetail({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3 mt-6 pt-4 border-t border-slate-200">
-        <button
-          type="button"
-          onClick={onResearchCompany}
-          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
-          <Search className="w-4 h-4" />
-          Research Company
-        </button>
-        {!confirmDelete ? (
+      <div className="mt-6 pt-4 border-t border-slate-200 space-y-3">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-urgent hover:bg-red-50"
+            onClick={handleResearchAndFind}
+            disabled={researching}
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete
+            <Search className="w-4 h-4" />
+            <Users className="w-4 h-4" />
+            {researching ? 'Researching...' : 'Research & Find People'}
           </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Are you sure?</span>
+          {!confirmDelete ? (
             <button
               type="button"
-              onClick={onDeleteCompany}
-              className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-urgent hover:bg-red-50"
             >
-              Confirm Delete
+              <Trash2 className="w-4 h-4" />
+              Delete
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(false)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Are you sure?</span>
+              <button
+                type="button"
+                onClick={onDeleteCompany}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+              >
+                Confirm Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+
+        {resultMessage && (
+          <div className="px-3 py-2 bg-emerald-50 text-emerald-700 text-xs rounded-md">
+            {resultMessage}
           </div>
         )}
       </div>

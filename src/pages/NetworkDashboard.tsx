@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useCompanies } from '@/hooks/useCompanies'
 import { useContacts } from '@/hooks/useContacts'
 import { useSettings } from '@/hooks/useSettings'
@@ -11,10 +11,17 @@ import { researchCompany, findContacts, generateMessage } from '@/lib/api'
 import { parseCompaniesCSV } from '@/lib/csv'
 import type { Company, Contact } from '@/db/schema'
 
+interface BulkProgress {
+  current: number
+  total: number
+  companyName: string
+}
+
 export default function NetworkDashboard() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null)
   const { settings } = useSettings()
-  const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts } = useCompanies()
+  const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts, refresh: refreshCompanies } = useCompanies()
   const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone, refresh: refreshContacts } = useContacts()
   const { incrementField } = useDailyLog()
 
@@ -50,42 +57,61 @@ export default function NetworkDashboard() {
     await incrementField('followupsDone')
   }
 
-  const handleResearchCompany = async () => {
-    if (!selectedCompany) return
+  const researchAndFindForCompany = useCallback(async (company: Company) => {
+    let researchResult: string | null = null
+    let findResult: { savedCount: number; total: number } | null = null
+
     try {
-      const result = await researchCompany({
-        companyName: selectedCompany.name,
-      })
-      await updateCompany(selectedCompany.id, {
-        website: result.website || selectedCompany.website,
-        careersUrl: result.careersUrl || selectedCompany.careersUrl,
-        linkedinUrl: result.linkedinUrl || selectedCompany.linkedinUrl,
-        industry: result.industry || selectedCompany.industry,
-        size: (result.size as Company['size']) || selectedCompany.size,
-        notes: selectedCompany.notes
-          ? selectedCompany.notes + '\n\n' + (result.summary || '')
+      const result = await researchCompany({ companyName: company.name })
+      await updateCompany(company.id, {
+        website: result.website || company.website,
+        careersUrl: result.careersUrl || company.careersUrl,
+        linkedinUrl: result.linkedinUrl || company.linkedinUrl,
+        industry: result.industry || company.industry,
+        size: (result.size as Company['size']) || company.size,
+        notes: company.notes
+          ? company.notes + '\n\n' + (result.summary || '')
           : (result.summary || ''),
       })
+      researchResult = 'done'
     } catch {
-      // API failed silently
+      researchResult = 'failed'
     }
-  }
 
-  const handleFindPeople = async () => {
-    if (!selectedCompany) return
     try {
       const result = await findContacts({
-        companyName: selectedCompany.name,
-        companyId: selectedCompany.id,
+        companyName: company.name,
+        companyId: company.id,
       })
+      findResult = { savedCount: result.savedCount, total: result.contacts.length }
       if (result.savedCount > 0) {
         await refreshContacts()
+        await refreshCompanies()
       }
-      return result
     } catch {
-      // API failed silently
+      findResult = null
     }
+
+    return { researchResult, findResult }
+  }, [updateCompany, refreshContacts, refreshCompanies])
+
+  const handleResearchAndFind = async () => {
+    if (!selectedCompany) return
+    return researchAndFindForCompany(selectedCompany)
   }
+
+  const handleResearchAll = useCallback(async () => {
+    if (bulkProgress) return
+    const total = companies.length
+    for (let i = 0; i < companies.length; i++) {
+      const company = companies[i]
+      setBulkProgress({ current: i + 1, total, companyName: company.name })
+      await researchAndFindForCompany(company)
+    }
+    setBulkProgress(null)
+    await refreshCompanies()
+    await refreshContacts()
+  }, [companies, bulkProgress, researchAndFindForCompany, refreshCompanies, refreshContacts])
 
   const handleGenerateMessage = async (contactId: string) => {
     if (!settings) return
@@ -139,6 +165,8 @@ export default function NetworkDashboard() {
             onSelect={setSelectedCompanyId}
             onAdd={handleAddCompany}
             onImport={handleImportCompanies}
+            onResearchAll={handleResearchAll}
+            bulkProgress={bulkProgress}
           />
         </div>
 
@@ -151,8 +179,7 @@ export default function NetworkDashboard() {
               onAddContact={handleAddContact}
               onUpdateContact={updateContact}
               onDeleteCompany={handleDeleteCompany}
-              onResearchCompany={handleResearchCompany}
-              onFindPeople={handleFindPeople}
+              onResearchAndFind={handleResearchAndFind}
               onGenerateMessage={handleGenerateMessage}
             />
           ) : (
