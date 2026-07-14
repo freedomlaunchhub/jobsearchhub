@@ -12,7 +12,7 @@ function jsonResponse(data, status = 200) {
 }
 
 export async function onRequestPost(context) {
-  const { request } = context;
+  const { request, env } = context;
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -20,7 +20,9 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
-    const { name, title, company, linkedinUrl, brightDataApiKey, anthropicApiKey } = body;
+    const { name, title, company, linkedinUrl } = body;
+    const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
+    const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
 
     if (!name) {
       return jsonResponse({ error: 'name is required' }, 400);
