@@ -14,12 +14,24 @@ function jsonResponse(data, status = 200) {
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
 
 const DEFAULT_TARGET_ROLES = [
-  'Senior Manager',
   'Director',
+  'VP',
+  'Vice President',
+  'Head of',
+  'Senior Manager',
+  'Manager',
   'Project Manager',
   'Program Manager',
+  'Change Manager',
+  'Transformation',
+  'PMO',
+  'Scrum Master',
+  'Agile',
   'Recruiter',
   'Talent Acquisition',
+  'People',
+  'HR',
+  'Hiring',
 ];
 
 export async function onRequestPost(context) {
@@ -43,6 +55,19 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'Bright Data API key not configured on server' }, 500);
     }
 
+    // Pull user's job titles from settings to build context-aware role matching
+    let userJobTitles = [];
+    if (userId) {
+      const settingsRow = await env.DB.prepare(
+        'SELECT job_titles FROM settings WHERE user_id = ?'
+      ).bind(userId).first();
+      if (settingsRow?.job_titles) {
+        try {
+          userJobTitles = JSON.parse(settingsRow.job_titles);
+        } catch {}
+      }
+    }
+
     const searchBody = {
       filter: {
         operator: 'and',
@@ -50,7 +75,7 @@ export async function onRequestPost(context) {
           { name: 'current_company_name', value: companyName, operator: 'contains' },
         ],
       },
-      limit: 10,
+      limit: 25,
     };
 
     const response = await fetch(
@@ -73,13 +98,43 @@ export async function onRequestPost(context) {
     const results = await response.json();
     const items = Array.isArray(results) ? results : (results.results || []);
 
-    const roleLower = targetRoles.map((r) => r.toLowerCase());
+    const allRoles = [...targetRoles];
+    for (const jt of userJobTitles) {
+      if (!allRoles.some((r) => r.toLowerCase() === jt.toLowerCase())) {
+        allRoles.push(jt);
+      }
+    }
+    const roleLower = allRoles.map((r) => r.toLowerCase());
+
+    // Seniority keywords for scoring — hiring managers and leaders score highest
+    const seniorityKeywords = ['director', 'vp', 'vice president', 'head of', 'chief', 'senior director', 'svp', 'evp'];
+    const recruiterKeywords = ['recruiter', 'talent acquisition', 'hiring', 'people operations', 'hr business partner'];
+
     const scored = items.map((person) => {
       const position = (person.position || person.title || '').toLowerCase();
+      let score = 0;
+
+      // Role relevance: matches user's target roles or job titles
       const roleMatch = roleLower.some((r) => position.includes(r));
-      return { person, roleMatch };
+      if (roleMatch) score += 3;
+
+      // Senior/leadership bonus — these are decision-makers
+      if (seniorityKeywords.some((k) => position.includes(k))) score += 2;
+
+      // Recruiter bonus — gatekeepers
+      if (recruiterKeywords.some((k) => position.includes(k))) score += 2;
+
+      // Peer-level bonus — same function, good for referrals
+      for (const jt of userJobTitles) {
+        if (position.includes(jt.toLowerCase())) {
+          score += 1;
+          break;
+        }
+      }
+
+      return { person, score };
     });
-    scored.sort((a, b) => (b.roleMatch ? 1 : 0) - (a.roleMatch ? 1 : 0));
+    scored.sort((a, b) => b.score - a.score);
 
     const seen = new Set();
     const contacts = [];
@@ -97,7 +152,6 @@ export async function onRequestPost(context) {
         city: person.city || '',
         about: person.about || '',
       });
-      if (contacts.length >= 10) break;
     }
 
     let savedCount = 0;
