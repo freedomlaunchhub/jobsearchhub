@@ -14,9 +14,8 @@ function jsonResponse(data, status = 200) {
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 
 export async function onRequestPost(context) {
-  const { request, env, data } = context;
-
   try {
+    const { request, env, data } = context;
     const body = await request.json();
     const { industries, country, region, companySizes, limit = 50 } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
@@ -63,7 +62,7 @@ export async function onRequestPost(context) {
     };
 
     let response;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    try {
       response = await fetch(
         `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
         {
@@ -75,28 +74,44 @@ export async function onRequestPost(context) {
           body: JSON.stringify(searchBody),
         }
       );
-      if (response.ok || response.status < 500) break;
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
+    } catch (fetchErr) {
       return jsonResponse({
-        error: `Bright Data API returned ${response.status}: ${text.slice(0, 300)}`,
+        error: `Network error calling Bright Data: ${fetchErr.message}`,
         requestSent: searchBody,
       }, 502);
     }
 
-    const results = await response.json();
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      return jsonResponse({
+        error: `Bright Data returned ${response.status}`,
+        detail: text.slice(0, 500),
+        requestSent: searchBody,
+      }, 502);
+    }
+
+    let results;
+    try {
+      results = await response.json();
+    } catch (parseErr) {
+      return jsonResponse({
+        error: `Failed to parse Bright Data response: ${parseErr.message}`,
+        requestSent: searchBody,
+      }, 502);
+    }
+
     const items = results.hits || [];
 
-    // Get existing company names for this user to mark duplicates
     let existingNames = new Set();
     if (userId) {
-      const { results: existing } = await env.DB.prepare(
-        'SELECT LOWER(name) as name FROM companies WHERE user_id = ?'
-      ).bind(userId).all();
-      existingNames = new Set(existing.map((r) => r.name));
+      try {
+        const { results: existing } = await env.DB.prepare(
+          'SELECT LOWER(name) as name FROM companies WHERE user_id = ?'
+        ).bind(userId).all();
+        existingNames = new Set(existing.map((r) => r.name));
+      } catch (dbErr) {
+        return jsonResponse({ error: `DB error: ${dbErr.message}` }, 500);
+      }
     }
 
     const companies = items
@@ -112,25 +127,27 @@ export async function onRequestPost(context) {
         alreadyExists: existingNames.has(c.name.toLowerCase()),
       }));
 
-    // Auto-save new companies to DB as 'new' status
     let savedCount = 0;
     if (userId) {
       for (const company of companies) {
         if (company.alreadyExists) continue;
-
-        const id = crypto.randomUUID();
-        await env.DB.prepare(
-          `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
-           VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', '', 0, ?)`
-        ).bind(
-          id, userId, company.name,
-          company.industry || '',
-          company.website || '',
-          company.linkedinUrl || '',
-          company.size || '',
-          new Date().toISOString()
-        ).run();
-        savedCount++;
+        try {
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
+             VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', '', 0, ?)`
+          ).bind(
+            id, userId, company.name,
+            company.industry || '',
+            company.website || '',
+            company.linkedinUrl || '',
+            company.size || '',
+            new Date().toISOString()
+          ).run();
+          savedCount++;
+        } catch (insertErr) {
+          console.error(`Insert error for ${company.name}:`, insertErr);
+        }
       }
     }
 
@@ -141,8 +158,7 @@ export async function onRequestPost(context) {
       alreadyExisted: companies.filter((c) => c.alreadyExists).length,
     });
   } catch (err) {
-    console.error('discover-companies error:', err);
-    return jsonResponse({ error: err.message || 'Internal server error' }, 500);
+    return jsonResponse({ error: err.message || 'Internal server error', stack: String(err.stack || '').slice(0, 500) }, 500);
   }
 }
 
