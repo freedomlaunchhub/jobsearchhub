@@ -56,7 +56,7 @@ export async function onRequestPost(context) {
   try {
     const { request, env, data } = context;
     const body = await request.json();
-    const { industries, country, region, companySizes, limit } = body;
+    const { industries, country, region, companySizes, limit, preview } = body;
     const brightDataApiKey = env.BRIGHT_DATA_API_KEY;
     const userId = data.user?.userId;
 
@@ -100,7 +100,9 @@ export async function onRequestPost(context) {
     const filter = filters.length === 1 ? filters[0] : { operator: 'and', filters };
     // No default cap — the pull covers everything the selected criteria match.
     // An explicit limit in the request body is still honored if provided.
-    const maxTotal = limit || Infinity;
+    // Preview mode fetches a single record just to read the match count
+    // (zero-match queries are free; 1 record costs a fraction of a cent).
+    const maxTotal = preview ? 1 : (limit || Infinity);
 
     let existingNames = new Set();
     if (userId) {
@@ -189,6 +191,17 @@ export async function onRequestPost(context) {
 
       searchAfter = results.search_after;
       if (!searchAfter || items.length === 0) break;
+    }
+
+    if (preview) {
+      return jsonResponse({
+        preview: true,
+        totalMatching,
+        companies: [],
+        savedCount: 0,
+        total: 0,
+        alreadyExisted: 0,
+      });
     }
 
     let savedCount = 0;

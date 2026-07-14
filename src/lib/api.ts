@@ -107,6 +107,7 @@ export interface DiscoverCompaniesParams {
   region?: string
   companySizes?: string[]
   limit?: number
+  preview?: boolean
 }
 
 export interface DiscoverCompaniesResult {
@@ -123,6 +124,7 @@ export interface DiscoverCompaniesResult {
   total: number
   alreadyExisted: number
   totalMatching: number | null
+  preview?: boolean
 }
 
 export function discoverCompanies(params: DiscoverCompaniesParams) {

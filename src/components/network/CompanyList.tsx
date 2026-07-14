@@ -1,8 +1,15 @@
 import { useState, useRef, useMemo } from 'react';
 import { Plus, Search, Upload, Compass } from 'lucide-react';
 import type { Company, CompanyPriority, CompanyStatus } from '../../db/schema';
+import { LINKEDIN_INDUSTRIES, COMPANY_SIZES } from '../../db/schema';
 import type { DiscoverCompaniesResult } from '../../lib/api';
 import StatusBadge from '../common/StatusBadge';
+
+interface DiscoverOverrides {
+  industries?: string[];
+  companySizes?: string[];
+  preview?: boolean;
+}
 
 interface CompanyListProps {
   companies: Company[];
@@ -10,7 +17,7 @@ interface CompanyListProps {
   onSelect: (id: string) => void;
   onAdd: (company: Partial<Company>) => void;
   onImport: (csvText: string) => void;
-  onDiscover: () => Promise<DiscoverCompaniesResult>;
+  onDiscover: (overrides?: DiscoverOverrides) => Promise<DiscoverCompaniesResult>;
   canDiscover: boolean;
 }
 
@@ -68,6 +75,33 @@ export default function CompanyList({
 
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<string | null>(null);
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [discIndustry, setDiscIndustry] = useState('');
+  const [discSize, setDiscSize] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  const [previewCount, setPreviewCount] = useState<number | null>(null);
+
+  function discoverOverrides(): DiscoverOverrides {
+    return {
+      // '' = fall back to Settings; '__any' = no filter at all
+      industries: discIndustry === '' ? undefined : discIndustry === '__any' ? [] : [discIndustry],
+      companySizes: discSize === '' ? undefined : discSize === '__any' ? [] : [discSize],
+    };
+  }
+
+  async function handlePreview() {
+    setPreviewing(true);
+    setPreviewCount(null);
+    try {
+      const result = await onDiscover({ ...discoverOverrides(), preview: true });
+      setPreviewCount(result.totalMatching ?? 0);
+    } catch {
+      setDiscoverResult('Preview failed — try again');
+      setTimeout(() => setDiscoverResult(null), 6000);
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -139,7 +173,7 @@ export default function CompanyList({
     setDiscovering(true);
     setDiscoverResult(null);
     try {
-      const result = await onDiscover();
+      const result = await onDiscover(discoverOverrides());
       if (result.savedCount > 0) {
         setDiscoverResult(
           result.totalMatching
@@ -149,13 +183,15 @@ export default function CompanyList({
       } else if (result.total > 0) {
         setDiscoverResult(`Found ${result.total} companies (all already in your list)`);
       } else {
-        setDiscoverResult('No companies found — update criteria in Settings');
+        setDiscoverResult('No companies found — try different criteria');
       }
+      setShowDiscover(false);
+      setPreviewCount(null);
     } catch {
-      setDiscoverResult('Discovery failed — check Settings criteria');
+      setDiscoverResult('Discovery failed — check your criteria and try again');
     } finally {
       setDiscovering(false);
-      setTimeout(() => setDiscoverResult(null), 6000);
+      setTimeout(() => setDiscoverResult(null), 8000);
     }
   }
 
@@ -168,13 +204,13 @@ export default function CompanyList({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleDiscover}
+              onClick={() => { setShowDiscover(!showDiscover); setPreviewCount(null); }}
               disabled={discovering || !canDiscover}
               className="inline-flex items-center gap-1 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
-              title={canDiscover ? 'Search for companies using your Settings criteria' : 'Set discovery criteria in Settings first'}
+              title={canDiscover ? 'Pull companies matching criteria you choose' : 'Set discovery criteria in Settings first'}
             >
               <Compass className="w-3.5 h-3.5" />
-              {discovering ? 'Searching...' : 'Discover'}
+              {discovering ? 'Pulling...' : 'Discover'}
             </button>
             <button
               type="button"
@@ -204,6 +240,59 @@ export default function CompanyList({
 
         {discoverResult && (
           <p className="mb-3 text-xs text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">{discoverResult}</p>
+        )}
+
+        {/* Discover panel: choose criteria per pull, preview count before pulling */}
+        {showDiscover && (
+          <div className="mb-3 p-3 bg-indigo-50/60 rounded-lg space-y-2">
+            <select
+              value={discIndustry}
+              onChange={(e) => { setDiscIndustry(e.target.value); setPreviewCount(null); }}
+              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">All my preferred industries</option>
+              <option value="__any">Any industry</option>
+              {LINKEDIN_INDUSTRIES.map((industry) => (
+                <option key={industry} value={industry}>{industry}</option>
+              ))}
+            </select>
+            <select
+              value={discSize}
+              onChange={(e) => { setDiscSize(e.target.value); setPreviewCount(null); }}
+              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">All my preferred sizes</option>
+              <option value="__any">Any size</option>
+              {COMPANY_SIZES.map((size) => (
+                <option key={size.value} value={size.value}>{size.label} employees</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePreview}
+                disabled={previewing || discovering}
+                className="rounded-md border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+              >
+                {previewing ? 'Checking...' : 'Preview count'}
+              </button>
+              {previewCount !== null && (
+                <span className="text-xs text-slate-600">
+                  {previewCount === 0 ? 'No matches' : `${previewCount.toLocaleString()} companies match`}
+                </span>
+              )}
+              {previewCount !== null && previewCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDiscover}
+                  disabled={discovering}
+                  className="ml-auto rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+                >
+                  {discovering ? 'Pulling...' : `Pull all ${previewCount.toLocaleString()}`}
+                </button>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Add form */}

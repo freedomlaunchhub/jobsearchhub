@@ -133,14 +133,15 @@ export default function NetworkDashboard() {
     }
   }
 
-  const handleDiscover = async () => {
+  const handleDiscover = async (overrides?: { industries?: string[]; companySizes?: string[]; preview?: boolean }) => {
     const result = await discoverCompanies({
-      industries: settings?.preferredIndustries.length ? settings.preferredIndustries : undefined,
+      industries: overrides?.industries ?? (settings?.preferredIndustries.length ? settings.preferredIndustries : undefined),
       country: settings?.discoveryCountry || undefined,
       region: settings?.discoveryLocation || undefined,
-      companySizes: settings?.preferredCompanySizes.length ? settings.preferredCompanySizes : undefined,
+      companySizes: overrides?.companySizes ?? (settings?.preferredCompanySizes.length ? settings.preferredCompanySizes : undefined),
+      preview: overrides?.preview,
     })
-    if (result.savedCount > 0) {
+    if (!overrides?.preview && result.savedCount > 0) {
       await refreshCompanies()
     }
     return result
