@@ -127,6 +127,10 @@ export interface DiscoverCompaniesResult {
   preview?: boolean
 }
 
-export function discoverCompanies(params: DiscoverCompaniesParams) {
-  return apiCall<DiscoverCompaniesResult>('discover-companies', params)
+export async function discoverCompanies(params: DiscoverCompaniesParams): Promise<DiscoverCompaniesResult> {
+  const result = await apiCall<DiscoverCompaniesResult & { error?: string }>('discover-companies', params)
+  if (result.error) {
+    throw new Error(result.error)
+  }
+  return result
 }
