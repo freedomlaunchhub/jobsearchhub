@@ -36,6 +36,10 @@ function mapLinkedInJob(raw, userId) {
   };
 }
 
+// Scheduled job-postings pull: imports all LinkedIn jobs posted in the past
+// 24 hours for each user's saved titles, plus their companies as
+// 'open_listing' entries. Jobs only by design — company research and contact
+// finding (the Dream 100 / network pipeline) run on demand from the app.
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -100,10 +104,13 @@ export async function onRequestPost(context) {
         continue;
       }
 
+      // Poll capped at 35 attempts (~3 minutes) to stay inside Cloudflare's
+      // per-invocation subrequest limit
       let rawJobs = [];
-      const maxAttempts = 60;
+      let completed = false;
+      const maxAttempts = 35;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await delay(3000);
+        await delay(5000);
 
         const progressResponse = await fetch(
           `https://api.brightdata.com/datasets/v3/progress/${snapshotId}`,
@@ -121,6 +128,7 @@ export async function onRequestPost(context) {
           if (snapshotResponse.ok) {
             const data = await snapshotResponse.json();
             rawJobs = Array.isArray(data) ? data : [];
+            completed = true;
           }
           break;
         }
@@ -140,10 +148,8 @@ export async function onRequestPost(context) {
           stmt.bind(j.id, j.user_id, j.title, j.company, j.location, j.remote, j.source, j.source_url, j.posted_date, j.description, j.salary_range, j.requirements, j.status, j.status_history, j.notes, j.applied_date, j.created_at)
         );
         await env.DB.batch(batch);
-      }
 
-      // Auto-create companies from new jobs with 'open_listing' status
-      if (mappedJobs.length > 0) {
+        // Companies from new postings join the list as 'open_listing'
         const { results: existingCompanies } = await env.DB.prepare(
           'SELECT LOWER(name) as name FROM companies WHERE user_id = ?'
         ).bind(userId).all();
@@ -152,153 +158,28 @@ export async function onRequestPost(context) {
         const newCompanyNames = [...new Set(mappedJobs.map((j) => j.company))]
           .filter((name) => name && !existingNames.has(name.toLowerCase()));
 
-        for (const name of newCompanyNames) {
-          await env.DB.prepare(
+        if (newCompanyNames.length > 0) {
+          const companyStmt = env.DB.prepare(
             `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
              VALUES (?, ?, ?, '', '', '', '', '', 'medium', 'open_listing', '', '', 0, ?)`
-          ).bind(crypto.randomUUID(), userId, name, new Date().toISOString()).run();
+          );
+          const now = new Date().toISOString();
+          await env.DB.batch(
+            newCompanyNames.map((name) => companyStmt.bind(crypto.randomUUID(), userId, name, now))
+          );
         }
       }
 
-      // Phase 2: Research companies the user queued (status 'queued'), capped
-      // per run so a bulk import can't trigger a runaway research sweep
-      const { results: newCompanies } = await env.DB.prepare(
-        "SELECT * FROM companies WHERE user_id = ? AND status = 'queued' ORDER BY created_at LIMIT 25"
-      ).bind(userId).all();
-
-      let researchedCount = 0;
-      for (const company of newCompanies) {
-        try {
-          const searchBody = {
-            filter: {
-              operator: 'and',
-              filters: [
-                { name: 'name', value: company.name, operator: 'includes' },
-              ],
-            },
-            size: 3,
-          };
-
-          const researchResponse = await fetch(
-            `https://api.brightdata.com/datasets/search/gd_l1vikfnt1wgvvqz95w`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${brightDataApiKey}`,
-              },
-              body: JSON.stringify(searchBody),
-            }
-          );
-
-          if (researchResponse.ok) {
-            const researchResults = await researchResponse.json();
-            const items = researchResults.hits || [];
-
-            if (items.length > 0) {
-              const c = items[0];
-              const industry = Array.isArray(c.industries) ? c.industries.join(', ') : (c.industry || '');
-              await env.DB.prepare(
-                `UPDATE companies SET
-                  industry = CASE WHEN industry = '' THEN ? ELSE industry END,
-                  website = CASE WHEN website = '' THEN ? ELSE website END,
-                  linkedin_url = CASE WHEN linkedin_url = '' THEN ? ELSE linkedin_url END,
-                  size = CASE WHEN size = '' THEN ? ELSE size END,
-                  notes = CASE WHEN notes = '' THEN ? ELSE notes END,
-                  status = 'researched'
-                WHERE id = ? AND user_id = ?`
-              ).bind(
-                industry,
-                c.website || '',
-                c.url || c.linkedin_url || '',
-                c.company_size || c.size || '',
-                c.about || c.description || '',
-                company.id, userId
-              ).run();
-            } else {
-              await env.DB.prepare(
-                "UPDATE companies SET status = 'researched' WHERE id = ? AND user_id = ?"
-              ).bind(company.id, userId).run();
-            }
-            researchedCount++;
-          }
-
-          // Find contacts for this company
-          const peopleBody = {
-            filter: {
-              operator: 'and',
-              filters: [
-                { name: 'current_company_name', value: company.name, operator: 'includes' },
-              ],
-            },
-            size: 25,
-          };
-
-          const peopleResponse = await fetch(
-            `https://api.brightdata.com/datasets/search/gd_l1viktl72bvl7bjuj0`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${brightDataApiKey}`,
-              },
-              body: JSON.stringify(peopleBody),
-            }
-          );
-
-          if (peopleResponse.ok) {
-            const peopleResults = await peopleResponse.json();
-            const people = peopleResults.hits || [];
-
-            let contactsSaved = 0;
-            for (const person of people) {
-              const name = person.name || person.full_name || '';
-              if (!name) continue;
-
-              const linkedinUrl = person.url || person.linkedin_url || '';
-              if (linkedinUrl) {
-                const existing = await env.DB.prepare(
-                  'SELECT id FROM contacts WHERE user_id = ? AND linkedin_url = ?'
-                ).bind(userId, linkedinUrl).first();
-                if (existing) continue;
-              }
-
-              const existingName = await env.DB.prepare(
-                'SELECT id FROM contacts WHERE user_id = ? AND company_id = ? AND LOWER(name) = LOWER(?)'
-              ).bind(userId, company.id, name).first();
-              if (existingName) continue;
-
-              await env.DB.prepare(
-                `INSERT INTO contacts (id, user_id, company_id, company_name, name, title, linkedin_url, other_social, rapport_notes, connection_status, message_drafts, notes, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'identified', '[]', '', ?)`
-              ).bind(
-                crypto.randomUUID(), userId, company.id, company.name,
-                name, person.position || person.title || '', linkedinUrl,
-                person.about || '',
-                new Date().toISOString()
-              ).run();
-              contactsSaved++;
-            }
-
-            if (contactsSaved > 0) {
-              await env.DB.prepare(
-                'UPDATE companies SET contact_count = (SELECT COUNT(*) FROM contacts WHERE company_id = ? AND user_id = ?) WHERE id = ? AND user_id = ?'
-              ).bind(company.id, userId, company.id, userId).run();
-            }
-          }
-
-          await delay(500);
-        } catch {
-          // Continue on individual company research failures
-        }
+      // Mark today's refresh done so the in-app Daily Briefing doesn't
+      // re-run the job search when the user opens the app
+      if (completed) {
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+        await env.DB.prepare(
+          'UPDATE settings SET last_daily_refresh = ? WHERE user_id = ?'
+        ).bind(today, userId).run();
       }
 
-      const today = new Date().toISOString().split('T')[0];
-      await env.DB.prepare(
-        'UPDATE settings SET last_daily_refresh = ? WHERE user_id = ?'
-      ).bind(today, userId).run();
-
-      summary.push({ userId, newJobs: mappedJobs.length, companiesResearched: researchedCount });
+      summary.push({ userId, newJobs: mappedJobs.length, completed });
     }
 
     return new Response(JSON.stringify({ success: true, summary }), {

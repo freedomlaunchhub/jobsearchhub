@@ -1,0 +1,12 @@
+# Scheduler for the daily 7:00 AM (America/Edmonton) job-postings pull.
+# Cloudflare cron triggers run in UTC, so both possible UTC offsets are
+# scheduled (13:00 = 7 AM MDT, 14:00 = 7 AM MST) and the worker itself
+# checks the local hour so exactly one fires per day year-round.
+name = "job-search-hub-cron"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+[triggers]
+crons = ["0 13 * * *", "0 14 * * *"]
+
+# Secret set via: wrangler secret put CRON_SECRET --config cron-worker/wrangler.toml
