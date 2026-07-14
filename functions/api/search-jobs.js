@@ -107,7 +107,7 @@ function deduplicateJobs(jobs) {
 }
 
 export async function onRequestPost(context) {
-  const { request } = context;
+  const { request, env } = context;
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -115,7 +115,9 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json();
-    const { titles, location, includeRemote, sources, brightDataApiKey, anthropicApiKey } = body;
+    const { titles, location, includeRemote, sources } = body;
+    const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
+    const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
 
     if (!titles || !Array.isArray(titles) || titles.length === 0) {
       return jsonResponse({ error: 'titles is required and must be a non-empty array' }, 400);

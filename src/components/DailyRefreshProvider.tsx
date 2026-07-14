@@ -33,7 +33,6 @@ export default function DailyRefreshProvider({ children }: Props) {
   // Auto-trigger on first load if not yet refreshed today
   useEffect(() => {
     if (!settings || triggered) return
-    if (!settings.brightDataApiKey || !settings.anthropicApiKey) return
 
     const today = new Date().toISOString().split('T')[0]
     if (settings.lastDailyRefresh === today) return

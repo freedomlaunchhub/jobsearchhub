@@ -73,11 +73,6 @@ export function useDailyRefresh({
       return
     }
 
-    if (!settings.brightDataApiKey || !settings.anthropicApiKey) {
-      setError('API keys not configured. Please add your Bright Data and Anthropic API keys in Settings.')
-      return
-    }
-
     const today = getTodayDate()
     if (!force && settings.lastDailyRefresh === today) {
       return
