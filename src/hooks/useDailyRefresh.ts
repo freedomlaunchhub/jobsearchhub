@@ -96,24 +96,49 @@ export function useDailyRefresh({
       })
 
       const allNewJobs: Job[] = []
+      let firstSearchError: string | null = null
 
       for (const source of enabledSources) {
         try {
-          const result = await searchJobs({
+          const result = (await searchJobs({
             titles: settings.jobTitles,
             location: settings.location,
             includeRemote: settings.remoteIncluded,
             sources: [source.id],
             brightDataApiKey: settings.brightDataApiKey,
             anthropicApiKey: settings.anthropicApiKey,
-          })
+          })) as { jobs?: unknown[]; error?: string }
 
-          const resultJobs = result as unknown as Job[]
-          if (Array.isArray(resultJobs)) {
-            allNewJobs.push(...resultJobs)
+          if (result.error && !firstSearchError) {
+            firstSearchError = result.error
           }
-        } catch {
-          // Continue on individual search failures
+
+          const mapped: Job[] = (result.jobs || []).map((j: unknown) => {
+            const raw = j as Record<string, unknown>
+            return {
+              id: crypto.randomUUID(),
+              title: (raw.title as string) || '',
+              company: (raw.company as string) || '',
+              location: (raw.location as string) || '',
+              remote: (raw.remote as boolean) || false,
+              source: (raw.source as string) || source.id,
+              sourceUrl: (raw.url as string) || (raw.sourceUrl as string) || '',
+              postedDate: (raw.postedDate as string) || new Date().toISOString().split('T')[0],
+              description: (raw.description as string) || '',
+              salaryRange: (raw.salary as string) || (raw.salaryRange as string) || null,
+              requirements: (raw.requirements as string[]) || [],
+              status: 'new' as const,
+              statusHistory: [{ status: 'new' as const, date: new Date().toISOString() }],
+              notes: '',
+              appliedDate: null,
+              createdAt: new Date().toISOString(),
+            }
+          })
+          allNewJobs.push(...mapped.filter((j) => j.title && j.company))
+        } catch (err) {
+          if (!firstSearchError) {
+            firstSearchError = err instanceof Error ? err.message : 'Job search failed'
+          }
         }
 
         searchIndex++
@@ -141,6 +166,9 @@ export function useDailyRefresh({
           status: 'new' as const,
         }))
         await addJobs(jobsWithStatus)
+      } else if (firstSearchError) {
+        // Every search failed — surface the real reason instead of silently continuing
+        throw new Error(`Job search failed: ${firstSearchError}`)
       }
 
       // Phase 2: Research Companies

@@ -36,6 +36,7 @@ export async function onRequestPost(context) {
     } = body;
     const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
     const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
+    const brightDataZone = body.brightDataZone || env.BRIGHT_DATA_ZONE || 'serp_api';
 
     if (!companyName) {
       return jsonResponse({ error: 'companyName is required' }, 400);
@@ -56,7 +57,7 @@ export async function onRequestPost(context) {
     const serpPromises = roleBatches.map((batch) => {
       const roleQuery = batch.map((role) => `"${role}"`).join(' OR ');
       const query = `"${companyName}" ${roleQuery} site:linkedin.com/in`;
-      return fetchSerp(query, brightDataApiKey);
+      return fetchSerp(query, brightDataApiKey, brightDataZone);
     });
 
     const serpResults = await Promise.all(serpPromises);
@@ -141,18 +142,19 @@ Return ONLY valid JSON, no other text.`,
   }
 }
 
-async function fetchSerp(query, brightDataApiKey) {
+async function fetchSerp(query, brightDataApiKey, zone) {
   try {
-    const response = await fetch('https://api.brightdata.com/serp/req', {
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&gl=ca&brd_json=1`;
+    const response = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${brightDataApiKey}`,
       },
       body: JSON.stringify({
-        query,
-        country: 'ca',
-        num_results: 20,
+        zone,
+        url: searchUrl,
+        format: 'raw',
       }),
     });
 
@@ -162,7 +164,12 @@ async function fetchSerp(query, brightDataApiKey) {
       return null;
     }
 
-    return response.json();
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text.slice(0, 5000) };
+    }
   } catch (err) {
     console.error(`Bright Data SERP error for "${query}":`, err.message);
     return null;

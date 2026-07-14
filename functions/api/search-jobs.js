@@ -16,17 +16,18 @@ const SOURCE_SITE_MAP = {
   indeed: 'site:indeed.ca',
 };
 
-async function searchBrightData(query, brightDataApiKey) {
-  const response = await fetch('https://api.brightdata.com/serp/req', {
+async function searchBrightData(query, brightDataApiKey, zone) {
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&gl=ca&brd_json=1`;
+  const response = await fetch('https://api.brightdata.com/request', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${brightDataApiKey}`,
     },
     body: JSON.stringify({
-      query,
-      country: 'ca',
-      num_results: 20,
+      zone,
+      url: searchUrl,
+      format: 'raw',
     }),
   });
 
@@ -35,7 +36,12 @@ async function searchBrightData(query, brightDataApiKey) {
     throw new Error(`Bright Data API error (${response.status}): ${text}`);
   }
 
-  return response.json();
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text.slice(0, 5000) };
+  }
 }
 
 async function normalizeWithAnthropic(rawResults, titles, location, anthropicApiKey) {
@@ -118,6 +124,7 @@ export async function onRequestPost(context) {
     const { titles, location, includeRemote, sources } = body;
     const brightDataApiKey = body.brightDataApiKey || env.BRIGHT_DATA_API_KEY;
     const anthropicApiKey = body.anthropicApiKey || env.ANTHROPIC_API_KEY;
+    const brightDataZone = body.brightDataZone || env.BRIGHT_DATA_ZONE || 'serp_api';
 
     if (!titles || !Array.isArray(titles) || titles.length === 0) {
       return jsonResponse({ error: 'titles is required and must be a non-empty array' }, 400);
@@ -147,7 +154,7 @@ export async function onRequestPost(context) {
         const siteFilter = SOURCE_SITE_MAP[source];
         const query = `${titleQuery} jobs ${locationQuery} ${siteFilter}`;
         try {
-          const results = await searchBrightData(query, brightDataApiKey);
+          const results = await searchBrightData(query, brightDataApiKey, brightDataZone);
           sourcesSearched.push(source);
           return { source, results };
         } catch (err) {
@@ -165,11 +172,12 @@ export async function onRequestPost(context) {
     }
 
     if (allRawResults.length === 0) {
+      const firstError = searchResults.find((r) => r.error)?.error;
       return jsonResponse({
         jobs: [],
         searchedAt: new Date().toISOString(),
         sourcesSearched,
-        error: 'No results returned from any source',
+        error: firstError || 'No results returned from any source',
       });
     }
 
