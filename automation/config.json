@@ -1,0 +1,15 @@
+{
+  "search": {
+    "keywords": "Project Manager",
+    "location": "Canada",
+    "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Project+Manager&location=Canada&f_TPR=r86400"
+  },
+  "notion": {
+    "database_name": "LinkedIn Job Listings",
+    "data_source_id": "c1cb3531-09d9-4b61-9c58-9058cca1890a"
+  },
+  "schedule": {
+    "cron": "0 11 * * *",
+    "timezone_note": "7 AM ET = 11:00 UTC"
+  }
+}

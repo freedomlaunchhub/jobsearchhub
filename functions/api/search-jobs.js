@@ -11,11 +11,6 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-const SOURCE_SITE_MAP = {
-  linkedin: 'site:linkedin.com/jobs',
-  indeed: 'site:indeed.ca',
-};
-
 async function generateHash(input) {
   const data = new TextEncoder().encode(input);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -23,58 +18,122 @@ async function generateHash(input) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 }
 
-function isJobUrl(url, source) {
-  if (!url) return false;
-  if (source === 'linkedin') {
-    return url.includes('linkedin.com/jobs/');
-  }
-  if (source === 'indeed') {
-    return url.includes('indeed.ca/') || url.includes('indeed.com/');
-  }
-  return true;
+function isWithinOneWeek(dateStr) {
+  if (!dateStr) return true;
+  const posted = new Date(dateStr);
+  if (isNaN(posted.getTime())) return true;
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  return posted >= oneWeekAgo;
 }
 
-function parseSerpTitle(title, source) {
+// Bright Data Web Data API for LinkedIn job listings
+async function fetchLinkedInJobs(titles, location, includeRemote, brightDataApiKey) {
+  const keyword = titles.join(' OR ');
+  const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}&f_TPR=r604800`;
+
+  const response = await fetch('https://api.brightdata.com/datasets/v3/trigger', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${brightDataApiKey}`,
+    },
+    body: JSON.stringify([{ url: searchUrl }]),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Bright Data Web Data API error (${response.status}): ${text}`);
+  }
+
+  const result = await response.json();
+
+  // The Web Data API may return results directly or a snapshot ID for async retrieval
+  if (result.snapshot_id) {
+    return await pollSnapshot(result.snapshot_id, brightDataApiKey);
+  }
+
+  return Array.isArray(result) ? result : (result.data || result.results || []);
+}
+
+async function pollSnapshot(snapshotId, brightDataApiKey) {
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+
+    const response = await fetch(`https://api.brightdata.com/datasets/v3/snapshot/${snapshotId}?format=json`, {
+      headers: { Authorization: `Bearer ${brightDataApiKey}` },
+    });
+
+    if (response.status === 200) {
+      return await response.json();
+    }
+    if (response.status !== 202) {
+      const text = await response.text();
+      throw new Error(`Snapshot poll error (${response.status}): ${text}`);
+    }
+  }
+  throw new Error('Snapshot polling timed out');
+}
+
+async function parseLinkedInWebData(listings) {
+  const jobs = [];
+
+  for (const listing of listings) {
+    if (!listing.job_title && !listing.title) continue;
+
+    const url = listing.url || listing.job_url || listing.link || '';
+    const id = await generateHash(url || `${listing.job_title || listing.title}-${listing.company_name || listing.company}`);
+    const postedDate = listing.job_posted_date || listing.posted_date || listing.date_posted || null;
+
+    if (!isWithinOneWeek(postedDate)) continue;
+
+    const isActive = !listing.job_status
+      || listing.job_status === 'Active'
+      || listing.job_status === 'Open'
+      || listing.job_status === 'Actively recruiting';
+    if (listing.job_status && !isActive) continue;
+
+    jobs.push({
+      id,
+      title: listing.job_title || listing.title || '',
+      company: listing.company_name || listing.company || '',
+      location: listing.job_location || listing.location || '',
+      url,
+      source: 'linkedin',
+      salary: listing.job_salary || listing.salary || null,
+      postedDate,
+      description: listing.job_description || listing.description || '',
+      remote: (listing.job_location || listing.location || '').toLowerCase().includes('remote')
+        || (listing.workplace_type || '').toLowerCase().includes('remote'),
+      employmentType: listing.employment_type || listing.job_type || null,
+      applicantCount: listing.applicant_count || listing.num_applicants || null,
+      experienceLevel: listing.experience_level || listing.seniority_level || null,
+    });
+  }
+
+  return jobs;
+}
+
+// SERP-based fallback for Indeed
+const INDEED_SITE_FILTER = 'site:indeed.ca';
+
+function isIndeedUrl(url) {
+  if (!url) return false;
+  return url.includes('indeed.ca/') || url.includes('indeed.com/');
+}
+
+function parseIndeedSerpTitle(title) {
   if (!title) return { title: null, company: null, location: null };
-
-  if (source === 'linkedin') {
-    // LinkedIn patterns:
-    // "Job Title - Company | LinkedIn"
-    // "Job Title - Location - Company | LinkedIn"
-    // "Job Title | Company | LinkedIn"
-    const cleaned = title.replace(/\s*\|\s*LinkedIn\s*$/, '').replace(/\s*-\s*LinkedIn\s*$/, '');
-
-    const pipeMatch = cleaned.match(/^(.+?)\s*\|\s*(.+)$/);
-    if (pipeMatch) {
-      return { title: pipeMatch[1].trim(), company: pipeMatch[2].trim(), location: null };
-    }
-
-    const parts = cleaned.split(/\s*[-–—]\s*/);
-    if (parts.length >= 3) {
-      return { title: parts[0].trim(), company: parts[parts.length - 1].trim(), location: parts.slice(1, -1).join(', ').trim() };
-    }
-    if (parts.length === 2) {
-      return { title: parts[0].trim(), company: parts[1].trim(), location: null };
-    }
-    return { title: cleaned.trim(), company: null, location: null };
+  const cleaned = title.replace(/\s*\|\s*Indeed\.?(com|ca)?\s*$/i, '');
+  const parts = cleaned.split(/\s*[-–—]\s*/);
+  if (parts.length >= 3) {
+    return { title: parts[0].trim(), company: parts[1].trim(), location: parts.slice(2).join(', ').trim() };
   }
-
-  if (source === 'indeed') {
-    // Indeed patterns:
-    // "Job Title - Company - Location | Indeed.com"
-    // "Job Title - Location | Indeed"
-    const cleaned = title.replace(/\s*\|\s*Indeed\.?(com|ca)?\s*$/i, '');
-    const parts = cleaned.split(/\s*[-–—]\s*/);
-    if (parts.length >= 3) {
-      return { title: parts[0].trim(), company: parts[1].trim(), location: parts.slice(2).join(', ').trim() };
-    }
-    if (parts.length === 2) {
-      return { title: parts[0].trim(), company: parts[1].trim(), location: null };
-    }
-    return { title: cleaned.trim(), company: null, location: null };
+  if (parts.length === 2) {
+    return { title: parts[0].trim(), company: parts[1].trim(), location: null };
   }
-
-  return { title: title.trim(), company: null, location: null };
+  return { title: cleaned.trim(), company: null, location: null };
 }
 
 function extractSalaryFromText(text) {
@@ -91,6 +150,7 @@ function extractPostedDate(text) {
     || text.match(/posted\s+(\d+)\+?\s*days?\s*ago/i);
   if (match) {
     const daysAgo = parseInt(match[1], 10);
+    if (daysAgo > 7) return null;
     const date = new Date();
     date.setDate(date.getDate() - daysAgo);
     return date.toISOString().split('T')[0];
@@ -102,37 +162,12 @@ function extractPostedDate(text) {
   return null;
 }
 
-async function parseOrganicResults(serpData, source) {
-  const organic = serpData?.organic || [];
-  const jobs = [];
-
-  for (const result of organic) {
-    if (!isJobUrl(result.link, source)) continue;
-
-    const parsed = parseSerpTitle(result.title, source);
-    if (!parsed.title) continue;
-
-    const snippet = result.description || result.snippet || '';
-    const id = await generateHash(result.link);
-
-    jobs.push({
-      id,
-      title: parsed.title,
-      company: parsed.company || '',
-      location: parsed.location || '',
-      url: result.link,
-      source,
-      salary: extractSalaryFromText(snippet) || extractSalaryFromText(result.title),
-      postedDate: extractPostedDate(snippet),
-      description: snippet,
-    });
-  }
-
-  return jobs;
-}
-
-async function searchBrightData(query, brightDataApiKey, zone) {
+async function searchIndeedViaSERP(titles, location, includeRemote, brightDataApiKey, zone) {
+  const titleQuery = titles.map((t) => `"${t}"`).join(' OR ');
+  const locationQuery = includeRemote ? `${location} OR remote` : location;
+  const query = `${titleQuery} jobs ${locationQuery} ${INDEED_SITE_FILTER}`;
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&gl=ca&brd_json=1`;
+
   const response = await fetch('https://api.brightdata.com/request', {
     method: 'POST',
     headers: {
@@ -148,15 +183,45 @@ async function searchBrightData(query, brightDataApiKey, zone) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Bright Data API error (${response.status}): ${text}`);
+    throw new Error(`Bright Data SERP error (${response.status}): ${text}`);
   }
 
   const text = await response.text();
+  let serpData;
   try {
-    return JSON.parse(text);
+    serpData = JSON.parse(text);
   } catch {
-    return { raw: text.slice(0, 5000) };
+    return [];
   }
+
+  const organic = serpData?.organic || [];
+  const jobs = [];
+
+  for (const result of organic) {
+    if (!isIndeedUrl(result.link)) continue;
+    const parsed = parseIndeedSerpTitle(result.title);
+    if (!parsed.title) continue;
+
+    const snippet = result.description || result.snippet || '';
+    const postedDate = extractPostedDate(snippet);
+
+    if (postedDate === null && snippet.match(/(\d+)\+?\s*days?\s*ago/i)) continue;
+
+    const id = await generateHash(result.link);
+    jobs.push({
+      id,
+      title: parsed.title,
+      company: parsed.company || '',
+      location: parsed.location || '',
+      url: result.link,
+      source: 'indeed',
+      salary: extractSalaryFromText(snippet) || extractSalaryFromText(result.title),
+      postedDate,
+      description: snippet,
+    });
+  }
+
+  return jobs;
 }
 
 function deduplicateJobs(jobs) {
@@ -201,26 +266,38 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: 'brightDataApiKey is required' }, 400);
     }
 
-    const titleQuery = titles.map((t) => `"${t}"`).join(' OR ');
-    const locationQuery = includeRemote ? `${location} OR remote` : location;
     const sourcesSearched = [];
     const allJobs = [];
+    const searchPromises = [];
 
-    const searchPromises = sources
-      .filter((source) => SOURCE_SITE_MAP[source])
-      .map(async (source) => {
-        const siteFilter = SOURCE_SITE_MAP[source];
-        const query = `${titleQuery} jobs ${locationQuery} ${siteFilter}`;
-        try {
-          const serpData = await searchBrightData(query, brightDataApiKey, brightDataZone);
-          sourcesSearched.push(source);
-          const jobs = await parseOrganicResults(serpData, source);
-          return { source, jobs };
-        } catch (err) {
-          console.error(`Error searching ${source}:`, err.message);
-          return { source, jobs: [], error: err.message };
-        }
-      });
+    if (sources.includes('linkedin')) {
+      searchPromises.push(
+        fetchLinkedInJobs(titles, location, includeRemote, brightDataApiKey)
+          .then(async (listings) => {
+            sourcesSearched.push('linkedin');
+            const jobs = await parseLinkedInWebData(listings);
+            return { source: 'linkedin', jobs };
+          })
+          .catch((err) => {
+            console.error('Error fetching LinkedIn jobs:', err.message);
+            return { source: 'linkedin', jobs: [], error: err.message };
+          })
+      );
+    }
+
+    if (sources.includes('indeed')) {
+      searchPromises.push(
+        searchIndeedViaSERP(titles, location, includeRemote, brightDataApiKey, brightDataZone)
+          .then((jobs) => {
+            sourcesSearched.push('indeed');
+            return { source: 'indeed', jobs };
+          })
+          .catch((err) => {
+            console.error('Error searching Indeed:', err.message);
+            return { source: 'indeed', jobs: [], error: err.message };
+          })
+      );
+    }
 
     const searchResults = await Promise.all(searchPromises);
 
