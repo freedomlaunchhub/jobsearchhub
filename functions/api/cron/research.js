@@ -1,4 +1,4 @@
-import { scoreContactRole, buildRoleKeywords, currentTitleAt, isExcludedTitle, aiRelevanceScreen } from '../find-contacts.js';
+import { scoreContactRole, buildRoleKeywords, currentTitleAt, isJuniorTitle, aiRelevanceScreen } from '../find-contacts.js';
 
 const COMPANY_DATASET_ID = 'gd_l1vikfnt1wgvvqz95w';
 const PEOPLE_DATASET_ID = 'gd_l1viktl72bvl7bjuj0';
@@ -139,7 +139,7 @@ export async function onRequestPost(context) {
               return {
                 p,
                 cleanTitle,
-                score: isExcludedTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
+                score: isJuniorTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
               };
             })
             .filter(({ score }) => score > 0)

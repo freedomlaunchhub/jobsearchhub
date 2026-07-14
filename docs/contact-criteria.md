@@ -23,16 +23,17 @@ free-form marketing text and is only used as a trimmed fallback. Grouped
 experience entries use the company name as the entry title — never treat
 that as a job title.
 
-### 1. Exclusions (checked first, absolute)
+### 1. Exclusions (checked first)
 
-Titles containing any of: student recruitment, international recruitment,
-admissions, enrollment, sales, account management / account executive /
-account support / account director, customer, client relations, business
-development, marketing.
+The ONLY absolute exclusions are clear seniority markers — junior roles:
+intern, trainee, fresher, junior, entry level, co-op, coordinator,
+assistant, student.
 
-Rationale: these either recruit customers/students (not employees) or don't
-hire for the user's target roles. This is what keeps "Recruiter" at an
-edtech (student recruitment) out of the results.
+There are NO blanket bans on functions (sales, customer, etc.). Whether a
+function is related to the user's target roles is contextual and decided by
+the AI screen (step 3) — e.g. "Recruitment Manager" at an edtech recruits
+students, not employees, and gets discarded there, while a Director in an
+adjacent function may still be a plausible hiring manager.
 
 ### 2. Role groups (kept, ranked in this order)
 
@@ -43,11 +44,14 @@ edtech (student recruitment) out of the results.
 
 Anyone matching no group is discarded.
 
-### 3. AI screen (final pass)
+### 3. AI screen (final pass — contextual relevance)
 
 One `claude-haiku-4-5` call per research action reviews the surviving titles
-and drops ambiguous ones. Fail-open: if the call errors, the deterministic
-result stands. Cost ≈ $0.001 per action.
+against the user's target roles and discards junior or unrelated ones by
+judgment, not fixed rules (student/customer recruitment ≠ talent
+acquisition; unrelated functions with no hiring relevance are dropped).
+Fail-open: if the call errors, the deterministic result stands.
+Cost ≈ $0.001 per action.
 
 ## Saved contact fields
 

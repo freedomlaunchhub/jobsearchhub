@@ -48,18 +48,17 @@ export function scoreContactRole(position, peerTitles) {
   return 0;
 }
 
-// Titles matching these are noise for job-search networking regardless of
-// seniority keywords: they recruit customers/students (not employees) or
-// work in functions that don't hire for the user's target roles.
-const NEGATIVE_KEYWORDS = [
-  'student recruit', 'international recruit', 'admission', 'enrollment', 'enrolment',
-  'sales', 'account manag', 'account executive', 'account support', 'account director', 'customer',
-  'client relations', 'business development', 'marketing',
+// The only absolute exclusions are clear seniority markers — junior roles
+// aren't useful networking targets. Whether a FUNCTION is related to the
+// user's target roles is contextual and left to the AI screen's judgment.
+const JUNIOR_KEYWORDS = [
+  'intern', 'trainee', 'fresher', 'junior', 'entry level', 'entry-level',
+  'co-op', 'coordinator', 'assistant', 'student',
 ];
 
-export function isExcludedTitle(title) {
+export function isJuniorTitle(title) {
   const t = title.toLowerCase();
-  return NEGATIVE_KEYWORDS.some((k) => t.includes(k));
+  return JUNIOR_KEYWORDS.some((k) => t.includes(k));
 }
 
 // Final screen: after the deterministic filters (country, current-title role
@@ -72,19 +71,20 @@ export async function aiRelevanceScreen(candidates, userJobTitles, anthropicApiK
   if (!anthropicApiKey || candidates.length === 0) return null;
 
   const list = candidates.map((c, i) => `${i}. ${c.title}`).join('\n');
-  const prompt = `You are screening employees at one company as networking targets for a job seeker.
+  const targetRoles = (userJobTitles || []).join(', ') || 'not specified';
+  const prompt = `You are screening employees at one company as networking targets for a job seeker whose target roles are: ${targetRoles}.
 
-KEEP a person ONLY if their job title clearly indicates one of:
-1. Hiring manager / leadership: Senior Manager, Director, Head of a function, VP / Vice President
-2. Relevant professional: Project Manager, Program Manager, Business Analyst
-3. TALENT recruiter: internal Recruiter, Talent Acquisition, Talent Partner — recruits EMPLOYEES for the company
-4. Peer: works as one of: ${(userJobTitles || []).join(', ') || '(none listed)'}
+KEEP a person if their job title indicates one of:
+1. Hiring manager / leadership plausibly able to hire for the target roles: Senior Manager, Director, Head of a function, VP / Vice President
+2. Professional related to the target roles: Project Manager, Program Manager, Business Analyst, or similar
+3. TALENT recruiter: internal Recruiter, Talent Acquisition, Talent Partner — someone who recruits EMPLOYEES for the company
+4. Peer: currently working in one of the target roles
 
 DISCARD:
-- Roles recruiting customers or students (student recruitment, international recruitment, admissions, enrollment)
-- Sales, account management, customer success/relations, business development, marketing
-- Junior staff, specialists, coordinators, associates, interns
-- Ambiguous titles — when in doubt, discard
+- Junior roles: interns, trainees, coordinators, assistants, entry-level staff
+- Roles unrelated to the target roles with no hiring relevance — use judgment. For example, "recruitment" titles that recruit customers or students (student recruitment, international recruitment, admissions) are NOT talent recruiters.
+
+Judge each title in context; there are no blanket bans on functions. When a title is genuinely too ambiguous to place, discard it.
 
 Job titles:
 ${list}
@@ -266,7 +266,7 @@ export async function onRequestPost(context) {
         return {
           person,
           cleanTitle,
-          score: isExcludedTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
+          score: isJuniorTitle(cleanTitle) ? 0 : scoreContactRole(cleanTitle, userJobTitles),
         };
       })
       .filter(({ score }) => score > 0);
