@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
-import type { Job, Company, Contact, Settings } from '@/db/schema'
-import { searchJobs, checkJobStatus, researchCompany, generateMessage, findContacts } from '@/lib/api'
+import type { Job, Company, Settings } from '@/db/schema'
+import { searchJobs, checkJobStatus } from '@/lib/api'
 import type { SearchJobsResult } from '@/lib/api'
 import { getSettings, saveSettings } from '@/db/settings'
 
@@ -24,11 +24,8 @@ interface DailyRefreshParams {
   settings: Settings | null
   jobs: Job[]
   companies: Company[]
-  contacts: Contact[]
   addJobs: (jobs: Job[]) => Promise<void>
   addCompany: (partial: Partial<Company>) => Promise<Company>
-  updateCompany: (id: string, partial: Partial<Company>) => Promise<void>
-  updateContact: (id: string, partial: Partial<Contact>) => Promise<void>
 }
 
 function delay(ms: number): Promise<void> {
@@ -79,11 +76,8 @@ export function useDailyRefresh({
   settings,
   jobs,
   companies,
-  contacts,
   addJobs,
   addCompany,
-  updateCompany,
-  updateContact,
 }: DailyRefreshParams): DailyRefreshResult {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [progress, setProgress] = useState<Progress>({
@@ -201,131 +195,9 @@ export function useDailyRefresh({
         total: 1,
       })
 
-      // Phase 2: Research Companies — only ones deliberately queued by the
-      // user (status 'queued'), capped per run. Bulk-imported companies sit
-      // in 'new' until queued, so a large import can't trigger a runaway
-      // (and costly) research sweep.
-      const RESEARCH_CAP = 25
-      const unresearchedCompanies = companies
-        .filter((c) => c.status === 'queued')
-        .slice(0, RESEARCH_CAP)
-      const totalCompanies = unresearchedCompanies.length
-
-      setProgress({
-        phase: 'Researching companies',
-        detail: `Researching companies... (0/${totalCompanies})`,
-        current: 0,
-        total: totalCompanies,
-      })
-
-      for (let i = 0; i < unresearchedCompanies.length; i++) {
-        const company = unresearchedCompanies[i]
-        try {
-          const result = await researchCompany({
-            companyName: company.name,
-          })
-
-          await updateCompany(company.id, {
-            notes: result.summary ?? company.notes,
-            industry: result.industry ?? company.industry,
-            website: result.website ?? company.website,
-            linkedinUrl: result.linkedinUrl ?? company.linkedinUrl,
-            size: (result.size as Company['size']) ?? company.size,
-            status: 'researched',
-          })
-        } catch {
-          // Continue on individual research failures
-        }
-
-        setProgress({
-          phase: 'Researching companies',
-          detail: `Researching companies... (${i + 1}/${totalCompanies})`,
-          current: i + 1,
-          total: totalCompanies,
-        })
-
-        await delay(500)
-      }
-
-      // Phase 3: Find Contacts — same deliberate scope as research: only
-      // queued/researched companies without contacts, capped per run
-      const companiesWithNoContacts = companies
-        .filter((c) => (c.status === 'queued' || c.status === 'researched') && c.contactCount === 0)
-        .slice(0, RESEARCH_CAP)
-      const totalFindContacts = companiesWithNoContacts.length
-
-      setProgress({
-        phase: 'Finding contacts',
-        detail: `Finding contacts... (0/${totalFindContacts})`,
-        current: 0,
-        total: totalFindContacts,
-      })
-
-      for (let i = 0; i < companiesWithNoContacts.length; i++) {
-        const company = companiesWithNoContacts[i]
-        try {
-          await findContacts({
-            companyName: company.name,
-            companyId: company.id,
-            targetRoles: ['Hiring Manager', 'Recruiter', 'HR Director'],
-            autoSave: true,
-          })
-        } catch {
-          // Continue on individual find failures
-        }
-
-        setProgress({
-          phase: 'Finding contacts',
-          detail: `Finding contacts... (${i + 1}/${totalFindContacts})`,
-          current: i + 1,
-          total: totalFindContacts,
-        })
-
-        await delay(500)
-      }
-
-      // Phase 4: Generate Messages
-      const contactsNeedingMessages = contacts.filter(
-        (c) => !c.messageDrafts || c.messageDrafts.length === 0
-      )
-      const totalMessages = contactsNeedingMessages.length
-
-      setProgress({
-        phase: 'Generating messages',
-        detail: `Generating messages... (0/${totalMessages})`,
-        current: 0,
-        total: totalMessages,
-      })
-
-      for (let i = 0; i < contactsNeedingMessages.length; i++) {
-        const contact = contactsNeedingMessages[i]
-        try {
-          const result = await generateMessage({
-            contactName: contact.name,
-            contactTitle: contact.title,
-            company: contact.companyName,
-            rapportNotes: contact.rapportNotes,
-            messageType: 'connection',
-            previousMessages: [],
-            additionalContext: '',
-          })
-
-          await updateContact(contact.id, {
-            messageDrafts: [result.message],
-          })
-        } catch {
-          // Continue on individual generation failures
-        }
-
-        setProgress({
-          phase: 'Generating messages',
-          detail: `Generating messages... (${i + 1}/${totalMessages})`,
-          current: i + 1,
-          total: totalMessages,
-        })
-
-        await delay(500)
-      }
+      // Company research, contact finding, and message drafting are NOT part
+      // of this refresh: they run on demand (Research & Find People button)
+      // or via the nightly cron that picks up every 'queued' company.
 
       // Mark refresh complete
       const currentSettings = await getSettings()
@@ -342,7 +214,7 @@ export function useDailyRefresh({
     } finally {
       setIsRefreshing(false)
     }
-  }, [settings, jobs, companies, contacts, addJobs, addCompany, updateCompany, updateContact])
+  }, [settings, jobs, companies, addJobs, addCompany])
 
   const runDailyRefresh = useCallback(() => runRefreshInternal(false), [runRefreshInternal])
   const forceRefresh = useCallback(() => runRefreshInternal(true), [runRefreshInternal])

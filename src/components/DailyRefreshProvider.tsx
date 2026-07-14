@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSettings } from '@/hooks/useSettings'
 import { useJobs } from '@/hooks/useJobs'
 import { useCompanies } from '@/hooks/useCompanies'
-import { useContacts } from '@/hooks/useContacts'
 import { useDailyRefresh } from '@/hooks/useDailyRefresh'
 import DailyBriefing from './DailyBriefing'
 
@@ -13,8 +12,7 @@ interface Props {
 export default function DailyRefreshProvider({ children }: Props) {
   const { settings } = useSettings()
   const { jobs, addJobs } = useJobs()
-  const { companies, addCompany, updateCompany } = useCompanies()
-  const { contacts, updateContact } = useContacts()
+  const { companies, addCompany } = useCompanies()
   const [skipped, setSkipped] = useState(false)
   const [triggered, setTriggered] = useState(false)
 
@@ -22,11 +20,8 @@ export default function DailyRefreshProvider({ children }: Props) {
     settings,
     jobs,
     companies,
-    contacts,
     addJobs,
     addCompany,
-    updateCompany,
-    updateContact,
   })
 
   // Auto-trigger on first load if not yet refreshed today
