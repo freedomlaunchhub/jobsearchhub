@@ -62,17 +62,22 @@ export async function onRequestPost(context) {
       },
     };
 
-    const response = await fetch(
-      `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${brightDataApiKey}`,
-        },
-        body: JSON.stringify(searchBody),
-      }
-    );
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch(
+        `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${brightDataApiKey}`,
+          },
+          body: JSON.stringify(searchBody),
+        }
+      );
+      if (response.ok || response.status < 500) break;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
 
     if (!response.ok) {
       const text = await response.text();
