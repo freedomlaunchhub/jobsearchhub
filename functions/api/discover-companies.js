@@ -32,13 +32,13 @@ export async function onRequestPost(context) {
 
     const filters = [];
     if (industry) {
-      filters.push({ name: 'industries', value: industry, operator: 'includes' });
+      filters.push({ name: 'industries', value: industry, operator: 'contains' });
     }
     if (location) {
-      filters.push({ name: 'headquarters', value: location, operator: 'includes' });
+      filters.push({ name: 'headquarters', value: location, operator: 'contains' });
     }
     if (companySize) {
-      filters.push({ name: 'company_size', value: companySize, operator: 'includes' });
+      filters.push({ name: 'company_size', value: companySize, operator: 'contains' });
     }
 
     const searchBody = {
@@ -63,7 +63,8 @@ export async function onRequestPost(context) {
 
     if (!response.ok) {
       const text = await response.text();
-      return jsonResponse({ error: `Bright Data error (${response.status}): ${text}` }, 502);
+      console.error('Bright Data error:', response.status, text, 'Request body:', JSON.stringify(searchBody));
+      return jsonResponse({ error: `Bright Data error (${response.status}): ${text}`, debug: { searchBody } }, 502);
     }
 
     const results = await response.json();

@@ -49,8 +49,9 @@ export default function Settings() {
         setDiscoverResult('No companies found — try different criteria')
         setDiscoverError(true)
       }
-    } catch {
-      setDiscoverResult('Discovery failed — check your criteria and try again')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setDiscoverResult(`Discovery failed: ${msg}`)
       setDiscoverError(true)
     } finally {
       setDiscovering(false)
