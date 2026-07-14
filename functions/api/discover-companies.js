@@ -93,22 +93,45 @@ export async function onRequestPost(context) {
 
     const searchBody = {
       size: Math.min(limit, 50),
+      sort: 'default',
       filter: filters.length === 1 ? filters[0] : { operator: 'and', filters },
     };
 
+    // Repeat discoveries page through the result pool instead of re-fetching
+    // the same first page: the search_after cursor from the previous response
+    // is stored in KV, keyed per user and per filter combination.
+    let cursorKey = null;
+    if (userId) {
+      const fingerprint = JSON.stringify(searchBody.filter);
+      let h = 5381;
+      for (let i = 0; i < fingerprint.length; i++) {
+        h = ((h * 33) ^ fingerprint.charCodeAt(i)) >>> 0;
+      }
+      cursorKey = `discover_cursor:${userId}:${h.toString(36)}`;
+      const cursor = await env.KV.get(cursorKey, 'json');
+      if (cursor) searchBody.search_after = cursor;
+    }
+
+    const callBrightData = async () =>
+      fetch(`https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${brightDataApiKey}`,
+        },
+        body: JSON.stringify(searchBody),
+      });
+
     let response;
     try {
-      response = await fetch(
-        `https://api.brightdata.com/datasets/search/${COMPANY_DATASET_ID}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${brightDataApiKey}`,
-          },
-          body: JSON.stringify(searchBody),
-        }
-      );
+      response = await callBrightData();
+      // A stale cursor (dataset refreshed since last page) can invalidate the
+      // request — restart from the first page rather than failing.
+      if (!response.ok && response.status !== 422 && searchBody.search_after) {
+        delete searchBody.search_after;
+        if (cursorKey) await env.KV.delete(cursorKey);
+        response = await callBrightData();
+      }
     } catch (fetchErr) {
       return jsonResponse({
         error: `Network error calling Bright Data: ${fetchErr.message}`,
@@ -116,9 +139,12 @@ export async function onRequestPost(context) {
       }, 502);
     }
 
-    // 422 means the filter matched zero records — that's a valid empty result
+    // 422 means the filter matched zero records — that's a valid empty result.
+    // With a cursor set it means we've paged past the end: clear it so the
+    // next discovery starts over from the first page.
     if (response.status === 422) {
-      return jsonResponse({ companies: [], savedCount: 0, total: 0, alreadyExisted: 0 });
+      if (cursorKey) await env.KV.delete(cursorKey);
+      return jsonResponse({ companies: [], savedCount: 0, total: 0, alreadyExisted: 0, hasMore: false });
     }
 
     if (!response.ok) {
@@ -141,6 +167,14 @@ export async function onRequestPost(context) {
     }
 
     const items = results.hits || [];
+
+    if (cursorKey) {
+      if (results.search_after && items.length > 0) {
+        await env.KV.put(cursorKey, JSON.stringify(results.search_after), { expirationTtl: 7 * 24 * 3600 });
+      } else {
+        await env.KV.delete(cursorKey);
+      }
+    }
 
     let existingNames = new Set();
     if (userId) {
@@ -196,6 +230,8 @@ export async function onRequestPost(context) {
       savedCount,
       total: companies.length,
       alreadyExisted: companies.filter((c) => c.alreadyExists).length,
+      totalMatching: results.total_hits ?? null,
+      hasMore: Boolean(results.search_after && items.length > 0),
     });
   } catch (err) {
     return jsonResponse({ error: err.message || 'Internal server error', stack: String(err.stack || '').slice(0, 500) }, 500);
