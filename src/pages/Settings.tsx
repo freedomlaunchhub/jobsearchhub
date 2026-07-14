@@ -274,9 +274,14 @@ export default function Settings() {
                   type="checkbox"
                   checked={settings.preferredCompanySizes.includes(size.value)}
                   onChange={(e) => {
+                    // Prune values from retired versions of this list (they
+                    // have no checkbox, so they'd otherwise be stuck forever)
+                    const known = settings.preferredCompanySizes.filter((s) =>
+                      COMPANY_SIZES.some((cs) => cs.value === s)
+                    )
                     const updated = e.target.checked
-                      ? [...settings.preferredCompanySizes, size.value]
-                      : settings.preferredCompanySizes.filter((s) => s !== size.value)
+                      ? [...known, size.value]
+                      : known.filter((s) => s !== size.value)
                     updateSettings({ preferredCompanySizes: updated })
                   }}
                   className="rounded border-slate-300 text-primary focus:ring-primary"

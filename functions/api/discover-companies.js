@@ -35,21 +35,14 @@ const SIZE_BUCKETS = {
   '10001+': '10,001+',
 };
 
-// Legacy composite ranges saved by older versions of the Settings UI
-const LEGACY_SIZE_RANGES = {
-  '201-1000': ['201-500', '501-1,000'],
-};
-
 function normalizeCompanySizes(sizes) {
   const out = new Set();
   for (const raw of sizes) {
     const key = String(raw).replace(/,/g, '').trim();
-    if (SIZE_BUCKETS[key]) {
-      out.add(SIZE_BUCKETS[key]);
-    } else if (LEGACY_SIZE_RANGES[key]) {
-      for (const v of LEGACY_SIZE_RANGES[key]) out.add(v);
-    }
-    // Unknown values are dropped rather than sent to the API
+    // Unrecognized values (e.g. stale ranges saved by older Settings
+    // versions) are dropped — never reinterpreted into buckets the user
+    // didn't pick
+    if (SIZE_BUCKETS[key]) out.add(SIZE_BUCKETS[key]);
   }
   return [...out];
 }
