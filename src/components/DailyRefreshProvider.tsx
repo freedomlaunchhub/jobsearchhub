@@ -18,7 +18,7 @@ export default function DailyRefreshProvider({ children }: Props) {
   const [skipped, setSkipped] = useState(false)
   const [triggered, setTriggered] = useState(false)
 
-  const { isRefreshing, progress, error, runDailyRefresh } = useDailyRefresh({
+  const { isRefreshing, progress, error, runDailyRefresh, forceRefresh } = useDailyRefresh({
     settings,
     jobs,
     companies,
@@ -30,6 +30,7 @@ export default function DailyRefreshProvider({ children }: Props) {
     updateContact,
   })
 
+  // Auto-trigger on first load if not yet refreshed today
   useEffect(() => {
     if (!settings || triggered) return
     if (!settings.brightDataApiKey || !settings.anthropicApiKey) return
@@ -41,11 +42,23 @@ export default function DailyRefreshProvider({ children }: Props) {
     runDailyRefresh()
   }, [settings, triggered, runDailyRefresh])
 
+  // Listen for manual trigger from Settings page
+  useEffect(() => {
+    const handler = () => {
+      setSkipped(false)
+      setTriggered(true)
+      forceRefresh()
+    }
+    window.addEventListener('run-daily-briefing', handler)
+    return () => window.removeEventListener('run-daily-briefing', handler)
+  }, [forceRefresh])
+
   const handleSkip = useCallback(() => setSkipped(true), [])
   const handleRetry = useCallback(() => {
-    setTriggered(false)
     setSkipped(false)
-  }, [])
+    setTriggered(true)
+    forceRefresh()
+  }, [forceRefresh])
 
   const showBriefing = !skipped && (isRefreshing || (error !== null && triggered))
 

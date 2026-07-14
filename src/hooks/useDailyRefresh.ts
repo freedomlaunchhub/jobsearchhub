@@ -15,6 +15,7 @@ interface DailyRefreshResult {
   progress: Progress
   error: string | null
   runDailyRefresh: () => Promise<void>
+  forceRefresh: () => Promise<void>
   lastRefreshDate: string | null
 }
 
@@ -66,7 +67,7 @@ export function useDailyRefresh({
   )
   const abortRef = useRef(false)
 
-  const runDailyRefresh = useCallback(async () => {
+  const runRefreshInternal = useCallback(async (force: boolean) => {
     if (!settings) {
       setError('Settings not loaded')
       return
@@ -78,8 +79,7 @@ export function useDailyRefresh({
     }
 
     const today = getTodayDate()
-    if (settings.lastDailyRefresh === today) {
-      setError('Daily refresh already completed today')
+    if (!force && settings.lastDailyRefresh === today) {
       return
     }
 
@@ -346,5 +346,8 @@ export function useDailyRefresh({
     }
   }, [settings, jobs, companies, contacts, addJobs, addCompany, updateCompany, addContact, updateContact])
 
-  return { isRefreshing, progress, error, runDailyRefresh, lastRefreshDate }
+  const runDailyRefresh = useCallback(() => runRefreshInternal(false), [runRefreshInternal])
+  const forceRefresh = useCallback(() => runRefreshInternal(true), [runRefreshInternal])
+
+  return { isRefreshing, progress, error, runDailyRefresh, forceRefresh, lastRefreshDate }
 }

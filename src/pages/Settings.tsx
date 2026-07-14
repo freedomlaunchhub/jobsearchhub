@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Upload, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Download, Upload, Trash2, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
 import TagInput from '@/components/common/TagInput'
 import { getDB } from '@/db/connection'
@@ -197,10 +197,21 @@ export default function Settings() {
           </div>
         </Field>
 
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted mb-4">
           API keys are stored locally in your browser. They are only sent to their respective
           services through the backend proxy.
         </p>
+
+        <button
+          onClick={() => window.dispatchEvent(new Event('run-daily-briefing'))}
+          disabled={!settings.brightDataApiKey || !settings.anthropicApiKey}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={16} /> Run Daily Briefing Now
+        </button>
+        {(!settings.brightDataApiKey || !settings.anthropicApiKey) && (
+          <p className="text-xs text-urgent mt-1">Enter both API keys above to enable the daily briefing.</p>
+        )}
       </Section>
 
       <Section title="Data Management">
