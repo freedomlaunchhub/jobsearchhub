@@ -115,14 +115,13 @@ export async function onRequestPost(context) {
         const id = crypto.randomUUID();
         await env.DB.prepare(
           `INSERT INTO companies (id, user_id, name, industry, website, careers_url, linkedin_url, size, priority, status, why_dream, notes, contact_count, created_at)
-           VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', ?, 0, ?)`
+           VALUES (?, ?, ?, ?, ?, '', ?, ?, 'medium', 'new', '', '', 0, ?)`
         ).bind(
           id, userId, company.name,
           company.industry || '',
           company.website || '',
           company.linkedinUrl || '',
           company.size || '',
-          company.about || '',
           new Date().toISOString()
         ).run();
         savedCount++;
