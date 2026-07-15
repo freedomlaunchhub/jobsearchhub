@@ -1,22 +1,20 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Check, Clock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, ExternalLink } from 'lucide-react';
 import { differenceInCalendarDays } from 'date-fns';
 import type { Contact } from '../../db/schema';
-import { formatRelativeDate } from '../../lib/utils';
 
 interface FollowUpQueueProps {
   contacts: Contact[];
   onMarkDone: (contactId: string) => void;
-  onSnooze: (contactId: string, days: number) => void;
 }
 
-export default function FollowUpQueue({ contacts, onMarkDone, onSnooze }: FollowUpQueueProps) {
+// Status-based reminders: contacts you've messaged or connected with whose
+// status hasn't moved in a week. "Followed up" resets the timer; changing
+// their status (e.g. to In Conversation) clears them out naturally.
+export default function FollowUpQueue({ contacts, onMarkDone }: FollowUpQueueProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   const today = new Date();
-  const dueContacts = contacts
-    .filter((c) => c.nextFollowupDate && new Date(c.nextFollowupDate) <= today)
-    .sort((a, b) => new Date(a.nextFollowupDate!).getTime() - new Date(b.nextFollowupDate!).getTime());
 
   return (
     <div className="bg-white rounded-xl shadow-sm">
@@ -27,9 +25,9 @@ export default function FollowUpQueue({ contacts, onMarkDone, onSnooze }: Follow
       >
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-slate-700">Follow-ups Due</h3>
-          {dueContacts.length > 0 && (
+          {contacts.length > 0 && (
             <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold text-white bg-red-500 rounded-full">
-              {dueContacts.length}
+              {contacts.length}
             </span>
           )}
         </div>
@@ -42,15 +40,18 @@ export default function FollowUpQueue({ contacts, onMarkDone, onSnooze }: Follow
 
       {!collapsed && (
         <div className="px-4 pb-4">
-          {dueContacts.length === 0 ? (
-            <p className="text-sm text-muted py-2">No follow-ups due</p>
+          {contacts.length === 0 ? (
+            <p className="text-sm text-muted py-2">
+              No follow-ups due — contacts appear here a week after you mark them
+              "message sent" or "connected" with no further movement
+            </p>
           ) : (
             <ul className="space-y-2">
-              {dueContacts.map((contact) => {
-                const daysOverdue = differenceInCalendarDays(
-                  today,
-                  new Date(contact.nextFollowupDate!)
-                );
+              {contacts.map((contact) => {
+                const days = differenceInCalendarDays(today, new Date(contact.lastContactDate!));
+                const nudge = contact.connectionStatus === 'message_sent'
+                  ? `No reply in ${days}d — follow up or move on`
+                  : `Connected ${days}d ago — start a conversation`;
                 return (
                   <li
                     key={contact.id}
@@ -60,36 +61,30 @@ export default function FollowUpQueue({ contacts, onMarkDone, onSnooze }: Follow
                       <p className="text-sm font-medium text-slate-800 truncate">
                         {contact.name}
                       </p>
-                      <p className="text-xs text-muted truncate">{contact.companyName}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs font-medium text-red-600">
-                          {daysOverdue === 0 ? 'Due today' : `${daysOverdue}d overdue`}
-                        </span>
-                        {contact.lastContactDate && (
-                          <span className="text-xs text-slate-400">
-                            Last: {formatRelativeDate(contact.lastContactDate)}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-xs text-muted truncate">{contact.title} · {contact.companyName}</p>
+                      <span className="text-xs font-medium text-red-600">{nudge}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {contact.linkedinUrl && (
+                        <a
+                          href={contact.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-primary hover:bg-slate-100"
+                          title="Open LinkedIn profile"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          LinkedIn
+                        </a>
+                      )}
                       <button
                         type="button"
                         onClick={() => onMarkDone(contact.id)}
                         className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
-                        title="Mark done"
+                        title="I followed up — restart the 7-day timer"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        Done
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onSnooze(contact.id, 3)}
-                        className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                        title="Snooze 3 days"
-                      >
-                        <Clock className="w-3.5 h-3.5" />
-                        +3d
+                        Followed up
                       </button>
                     </div>
                   </li>

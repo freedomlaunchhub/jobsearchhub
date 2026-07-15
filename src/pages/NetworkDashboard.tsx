@@ -15,7 +15,7 @@ export default function NetworkDashboard() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const { settings } = useSettings()
   const { companies, loading: companiesLoading, addCompany, updateCompany, removeCompany, statusCounts, refresh: refreshCompanies } = useCompanies()
-  const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, snoozeFollowup, markFollowupDone, refresh: refreshContacts } = useContacts()
+  const { loading: contactsLoading, getCompanyContacts, addContact, updateContact, removeContact, overdueFollowups, markFollowupDone, refresh: refreshContacts } = useContacts()
   const { incrementField } = useDailyLog()
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId) ?? null
@@ -141,7 +141,6 @@ export default function NetworkDashboard() {
         <FollowUpQueue
           contacts={overdueFollowups}
           onMarkDone={handleFollowupDone}
-          onSnooze={snoozeFollowup}
         />
       </div>
 

@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { format, addDays } from 'date-fns'
 import type { Contact } from '@/db/schema'
 import { getAllContacts, saveContact, deleteContact } from '@/db/contacts'
 import { updateContactCount } from '@/db/companies'
+
+// A contact is due for follow-up when their networking status has sat
+// unchanged this long since the last recorded touch
+export const FOLLOWUP_AFTER_DAYS = 7
 
 export function useContacts() {
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -58,7 +61,13 @@ export function useContacts() {
       setContacts((prev) => {
         const idx = prev.findIndex((c) => c.id === id)
         if (idx === -1) return prev
-        const updated = { ...prev[idx], ...partial }
+        // A status change is a networking touch — stamp it so the follow-up
+        // queue can measure how long a contact has sat without movement
+        const stamped =
+          partial.connectionStatus && partial.connectionStatus !== prev[idx].connectionStatus
+            ? { ...partial, lastContactDate: new Date().toISOString() }
+            : partial
+        const updated = { ...prev[idx], ...stamped }
         saveContact(updated)
         const next = [...prev]
         next[idx] = updated
@@ -80,40 +89,27 @@ export function useContacts() {
     [contacts]
   )
 
+  // Status-based follow-up queue: contacts you've messaged (or connected
+  // with) whose status hasn't moved in FOLLOWUP_AFTER_DAYS — no manual dates
   const overdueFollowups = useMemo(() => {
-    const today = format(new Date(), 'yyyy-MM-dd')
+    const cutoff = Date.now() - FOLLOWUP_AFTER_DAYS * 24 * 60 * 60 * 1000
     return contacts
-      .filter((c) => c.nextFollowupDate !== null && c.nextFollowupDate <= today)
-      .sort((a, b) => (a.nextFollowupDate! < b.nextFollowupDate! ? -1 : 1))
+      .filter(
+        (c) =>
+          (c.connectionStatus === 'message_sent' || c.connectionStatus === 'connected') &&
+          c.lastContactDate !== null &&
+          new Date(c.lastContactDate).getTime() <= cutoff
+      )
+      .sort((a, b) => (a.lastContactDate! < b.lastContactDate! ? -1 : 1))
   }, [contacts])
 
-  const snoozeFollowup = useCallback(
-    async (contactId: string, days: number): Promise<void> => {
-      const newDate = format(addDays(new Date(), days), 'yyyy-MM-dd')
-      setContacts((prev) => {
-        const idx = prev.findIndex((c) => c.id === contactId)
-        if (idx === -1) return prev
-        const updated = { ...prev[idx], nextFollowupDate: newDate }
-        saveContact(updated)
-        const next = [...prev]
-        next[idx] = updated
-        return next
-      })
-    },
-    []
-  )
-
+  // "I followed up" — reset the timer without changing status
   const markFollowupDone = useCallback(
     async (contactId: string): Promise<void> => {
-      const today = format(new Date(), 'yyyy-MM-dd')
       setContacts((prev) => {
         const idx = prev.findIndex((c) => c.id === contactId)
         if (idx === -1) return prev
-        const updated = {
-          ...prev[idx],
-          lastContactDate: today,
-          nextFollowupDate: null,
-        }
+        const updated = { ...prev[idx], lastContactDate: new Date().toISOString() }
         saveContact(updated)
         const next = [...prev]
         next[idx] = updated
@@ -136,7 +132,6 @@ export function useContacts() {
     updateContact,
     removeContact,
     overdueFollowups,
-    snoozeFollowup,
     markFollowupDone,
     refresh,
   }
